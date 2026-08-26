@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://krabby.local/schemas/issue-manifest.schema.json",
+  "title": "Issue manifest",
+  "description": "Accompanies every formally issued PDF under project/publication/issued/<artifact-id>/<issue-id>/. Ordinary builds are disposable; an issued PDF plus this manifest is a record.",
+  "type": "object",
+  "required": [
+    "artifact_id", "issue_id", "revision", "issue_purpose",
+    "typst_source", "typst_source_sha256", "typst_version",
+    "compile_command", "producer_git_commit", "issued_at",
+    "approver_role", "pdf_path", "pdf_sha256"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "artifact_id": { "type": "string", "pattern": "^(GOV|SCR|PUB|ACQ|DD|DSN|FIN|APR|PRO|CON|CLO)-[0-9]{3}$" },
+    "issue_id": { "type": "string", "pattern": "^ISS-[0-9]{3}$" },
+    "revision": { "type": "string", "pattern": "^[A-Z][0-9]*$" },
+    "issue_purpose": { "type": "string", "minLength": 1 },
+    "typst_source": { "type": "string", "description": "Repo-relative path to the .typ that produced the PDF." },
+    "typst_source_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "source_markdown": { "type": ["string", "null"], "description": "Repo-relative path to the reviewed Markdown draft, if any." },
+    "source_markdown_sha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+    "supporting_data": {
+      "type": "array",
+      "description": "Every data file the document's figures or tables depend on.",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "role": { "type": "string" }
+        }
+      }
+    },
+    "typst_version": { "type": "string", "minLength": 1 },
+    "compile_command": { "type": "string", "minLength": 1 },
+    "producer_git_commit": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" },
+    "issued_at": { "type": "string", "format": "date" },
+    "approver_role": { "type": "string", "minLength": 1 },
+    "approver_name": { "type": ["string", "null"] },
+    "visual_inspection_by": {
+      "type": ["string", "null"],
+      "description": "Role that opened and read the compiled PDF. Compilation is not inspection."
+    },
+    "pdf_path": { "type": "string" },
+    "pdf_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "supersedes_issue_id": { "type": ["string", "null"], "pattern": "^ISS-[0-9]{3}$" },
+    "confidentiality": { "enum": ["public", "internal", "sensitive"] }
+  }
+}

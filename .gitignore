@@ -1,0 +1,20 @@
+.DS_Store
+.env
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+cache/
+output/
+data/raw/
+data/derived/
+
+# --- project/ artifact workspace ---------------------------------------------
+# Ordinary Typst builds are disposable; only issued PDFs under
+# project/publication/issued/ are records and they are tracked deliberately.
+project/publication/build/
+# Working records, anything confidentiality: sensitive, and contract material.
+project/private/
+!project/private/README.md

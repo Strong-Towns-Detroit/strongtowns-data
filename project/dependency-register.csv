@@ -1,0 +1,217 @@
+from_id,to_id,dependency_type,rationale
+GOV-001,GOV-002,requires_input,GOV-002 cannot be completed without GOV-001
+GOV-002,GOV-003,requires_input,GOV-003 cannot be completed without GOV-002
+GOV-002,GOV-004,requires_input,GOV-004 cannot be completed without GOV-002
+GOV-003,GOV-005,requires_input,GOV-005 cannot be completed without GOV-003
+GOV-003,GOV-006,requires_input,GOV-006 cannot be completed without GOV-003
+GOV-002,GOV-007,requires_input,GOV-007 cannot be completed without GOV-002
+GOV-002,GOV-008,requires_input,GOV-008 cannot be completed without GOV-002
+GOV-002,GOV-009,requires_input,GOV-009 cannot be completed without GOV-002
+GOV-002,GOV-010,requires_input,GOV-010 cannot be completed without GOV-002
+GOV-003,GOV-015,requires_input,GOV-015 cannot be completed without GOV-003
+GOV-005,GOV-016,requires_input,GOV-016 cannot be completed without GOV-005
+GOV-009,GOV-017,requires_input,GOV-017 cannot be completed without GOV-009
+CON-008,GOV-017,requires_input,GOV-017 cannot be completed without CON-008
+GOV-018,GOV-019,requires_input,GOV-019 cannot be completed without GOV-018
+GOV-021,GOV-020,requires_input,GOV-020 cannot be completed without GOV-021
+GOV-012,GOV-024,requires_input,GOV-024 cannot be completed without GOV-012
+SCR-004,SCR-001,requires_input,SCR-001 cannot be completed without SCR-004
+SCR-001,SCR-002,requires_input,SCR-002 cannot be completed without SCR-001
+SCR-008,SCR-002,requires_input,SCR-002 cannot be completed without SCR-008
+SCR-003,SCR-004,requires_input,SCR-004 cannot be completed without SCR-003
+SCR-001,SCR-005,requires_input,SCR-005 cannot be completed without SCR-001
+SCR-001,SCR-006,requires_input,SCR-006 cannot be completed without SCR-001
+SCR-001,SCR-007,requires_input,SCR-007 cannot be completed without SCR-001
+SCR-006,SCR-008,requires_input,SCR-008 cannot be completed without SCR-006
+SCR-007,SCR-008,requires_input,SCR-008 cannot be completed without SCR-007
+PUB-001,PUB-002,requires_input,PUB-002 cannot be completed without PUB-001
+PUB-002,PUB-003,requires_input,PUB-003 cannot be completed without PUB-002
+PUB-003,PUB-004,requires_input,PUB-004 cannot be completed without PUB-003
+PUB-001,PUB-005,requires_input,PUB-005 cannot be completed without PUB-001
+ACQ-001,ACQ-003,requires_input,ACQ-003 cannot be completed without ACQ-001
+ACQ-001,ACQ-004,requires_input,ACQ-004 cannot be completed without ACQ-001
+ACQ-001,ACQ-005,requires_input,ACQ-005 cannot be completed without ACQ-001
+ACQ-001,ACQ-006,requires_input,ACQ-006 cannot be completed without ACQ-001
+ACQ-001,ACQ-007,requires_input,ACQ-007 cannot be completed without ACQ-001
+ACQ-001,ACQ-008,requires_input,ACQ-008 cannot be completed without ACQ-001
+ACQ-001,ACQ-009,requires_input,ACQ-009 cannot be completed without ACQ-001
+ACQ-001,ACQ-010,requires_input,ACQ-010 cannot be completed without ACQ-001
+ACQ-001,ACQ-011,requires_input,ACQ-011 cannot be completed without ACQ-001
+ACQ-001,ACQ-012,requires_input,ACQ-012 cannot be completed without ACQ-001
+ACQ-001,ACQ-013,requires_input,ACQ-013 cannot be completed without ACQ-001
+ACQ-001,ACQ-014,requires_input,ACQ-014 cannot be completed without ACQ-001
+ACQ-001,ACQ-015,requires_input,ACQ-015 cannot be completed without ACQ-001
+ACQ-001,ACQ-016,requires_input,ACQ-016 cannot be completed without ACQ-001
+ACQ-001,ACQ-017,requires_input,ACQ-017 cannot be completed without ACQ-001
+ACQ-001,ACQ-018,requires_input,ACQ-018 cannot be completed without ACQ-001
+ACQ-001,ACQ-019,requires_input,ACQ-019 cannot be completed without ACQ-001
+ACQ-001,ACQ-020,requires_input,ACQ-020 cannot be completed without ACQ-001
+ACQ-001,ACQ-021,requires_input,ACQ-021 cannot be completed without ACQ-001
+ACQ-001,ACQ-022,requires_input,ACQ-022 cannot be completed without ACQ-001
+ACQ-001,ACQ-023,requires_input,ACQ-023 cannot be completed without ACQ-001
+ACQ-001,ACQ-024,requires_input,ACQ-024 cannot be completed without ACQ-001
+ACQ-001,ACQ-025,requires_input,ACQ-025 cannot be completed without ACQ-001
+ACQ-001,ACQ-026,requires_input,ACQ-026 cannot be completed without ACQ-001
+SCR-002,DD-001,requires_input,DD-001 cannot be completed without SCR-002
+DD-001,DD-002,requires_input,DD-002 cannot be completed without DD-001
+DD-001,DD-003,requires_input,DD-003 cannot be completed without DD-001
+DD-001,DD-004,requires_input,DD-004 cannot be completed without DD-001
+DD-001,DD-005,requires_input,DD-005 cannot be completed without DD-001
+DD-001,DD-006,requires_input,DD-006 cannot be completed without DD-001
+DD-001,DD-007,requires_input,DD-007 cannot be completed without DD-001
+DD-001,DD-008,requires_input,DD-008 cannot be completed without DD-001
+DD-001,DD-009,requires_input,DD-009 cannot be completed without DD-001
+DD-001,DD-010,requires_input,DD-010 cannot be completed without DD-001
+DD-001,DD-011,requires_input,DD-011 cannot be completed without DD-001
+DD-001,DD-012,requires_input,DD-012 cannot be completed without DD-001
+DD-001,DD-013,requires_input,DD-013 cannot be completed without DD-001
+DD-001,DD-014,requires_input,DD-014 cannot be completed without DD-001
+DD-001,DD-015,requires_input,DD-015 cannot be completed without DD-001
+DD-001,DD-016,requires_input,DD-016 cannot be completed without DD-001
+DD-001,DD-017,requires_input,DD-017 cannot be completed without DD-001
+DD-001,DD-018,requires_input,DD-018 cannot be completed without DD-001
+DD-001,DD-019,requires_input,DD-019 cannot be completed without DD-001
+DD-001,DD-020,requires_input,DD-020 cannot be completed without DD-001
+DD-001,DD-021,requires_input,DD-021 cannot be completed without DD-001
+DD-001,DD-022,requires_input,DD-022 cannot be completed without DD-001
+DD-001,DD-023,requires_input,DD-023 cannot be completed without DD-001
+DD-001,DD-024,requires_input,DD-024 cannot be completed without DD-001
+DD-001,DD-025,requires_input,DD-025 cannot be completed without DD-001
+DD-001,DD-026,requires_input,DD-026 cannot be completed without DD-001
+DD-001,DD-027,requires_input,DD-027 cannot be completed without DD-001
+SCR-003,DSN-001,requires_input,DSN-001 cannot be completed without SCR-003
+SCR-003,DSN-002,requires_input,DSN-002 cannot be completed without SCR-003
+SCR-003,DSN-003,requires_input,DSN-003 cannot be completed without SCR-003
+SCR-003,DSN-004,requires_input,DSN-004 cannot be completed without SCR-003
+SCR-003,DSN-005,requires_input,DSN-005 cannot be completed without SCR-003
+SCR-003,DSN-006,requires_input,DSN-006 cannot be completed without SCR-003
+SCR-003,DSN-007,requires_input,DSN-007 cannot be completed without SCR-003
+SCR-003,DSN-008,requires_input,DSN-008 cannot be completed without SCR-003
+SCR-003,DSN-009,requires_input,DSN-009 cannot be completed without SCR-003
+SCR-003,DSN-010,requires_input,DSN-010 cannot be completed without SCR-003
+SCR-003,DSN-011,requires_input,DSN-011 cannot be completed without SCR-003
+SCR-003,DSN-012,requires_input,DSN-012 cannot be completed without SCR-003
+SCR-003,DSN-013,requires_input,DSN-013 cannot be completed without SCR-003
+SCR-003,DSN-014,requires_input,DSN-014 cannot be completed without SCR-003
+SCR-008,FIN-001,requires_input,FIN-001 cannot be completed without SCR-008
+FIN-001,FIN-002,requires_input,FIN-002 cannot be completed without FIN-001
+FIN-001,FIN-003,requires_input,FIN-003 cannot be completed without FIN-001
+FIN-001,FIN-004,requires_input,FIN-004 cannot be completed without FIN-001
+FIN-001,FIN-005,requires_input,FIN-005 cannot be completed without FIN-001
+FIN-001,FIN-006,requires_input,FIN-006 cannot be completed without FIN-001
+FIN-001,FIN-007,requires_input,FIN-007 cannot be completed without FIN-001
+FIN-001,FIN-008,requires_input,FIN-008 cannot be completed without FIN-001
+FIN-001,FIN-009,requires_input,FIN-009 cannot be completed without FIN-001
+FIN-001,FIN-010,requires_input,FIN-010 cannot be completed without FIN-001
+DD-010,APR-001,requires_input,APR-001 cannot be completed without DD-010
+APR-001,APR-002,requires_input,APR-002 cannot be completed without APR-001
+APR-001,APR-003,requires_input,APR-003 cannot be completed without APR-001
+APR-001,APR-004,requires_input,APR-004 cannot be completed without APR-001
+APR-001,APR-005,requires_input,APR-005 cannot be completed without APR-001
+APR-001,APR-006,requires_input,APR-006 cannot be completed without APR-001
+APR-001,APR-007,requires_input,APR-007 cannot be completed without APR-001
+APR-001,APR-008,requires_input,APR-008 cannot be completed without APR-001
+APR-001,APR-009,requires_input,APR-009 cannot be completed without APR-001
+APR-001,APR-010,requires_input,APR-010 cannot be completed without APR-001
+APR-001,APR-011,requires_input,APR-011 cannot be completed without APR-001
+DSN-012,PRO-001,requires_input,PRO-001 cannot be completed without DSN-012
+DSN-012,PRO-002,requires_input,PRO-002 cannot be completed without DSN-012
+DSN-012,PRO-003,requires_input,PRO-003 cannot be completed without DSN-012
+DSN-012,PRO-004,requires_input,PRO-004 cannot be completed without DSN-012
+DSN-012,PRO-005,requires_input,PRO-005 cannot be completed without DSN-012
+DSN-012,PRO-006,requires_input,PRO-006 cannot be completed without DSN-012
+DSN-012,PRO-007,requires_input,PRO-007 cannot be completed without DSN-012
+DSN-012,PRO-008,requires_input,PRO-008 cannot be completed without DSN-012
+DSN-012,PRO-009,requires_input,PRO-009 cannot be completed without DSN-012
+DSN-012,PRO-010,requires_input,PRO-010 cannot be completed without DSN-012
+PRO-002,CON-001,requires_input,CON-001 cannot be completed without PRO-002
+PRO-002,CON-002,requires_input,CON-002 cannot be completed without PRO-002
+PRO-002,CON-003,requires_input,CON-003 cannot be completed without PRO-002
+CON-003,CON-004,requires_input,CON-004 cannot be completed without CON-003
+CON-003,CON-005,requires_input,CON-005 cannot be completed without CON-003
+CON-003,CON-006,requires_input,CON-006 cannot be completed without CON-003
+CON-003,CON-007,requires_input,CON-007 cannot be completed without CON-003
+CON-003,CON-008,requires_input,CON-008 cannot be completed without CON-003
+CON-003,CON-009,requires_input,CON-009 cannot be completed without CON-003
+CON-003,CON-010,requires_input,CON-010 cannot be completed without CON-003
+CON-003,CON-011,requires_input,CON-011 cannot be completed without CON-003
+CON-003,CON-012,requires_input,CON-012 cannot be completed without CON-003
+CON-003,CON-013,requires_input,CON-013 cannot be completed without CON-003
+CON-003,CON-014,requires_input,CON-014 cannot be completed without CON-003
+CON-003,CON-015,requires_input,CON-015 cannot be completed without CON-003
+CON-003,CON-016,requires_input,CON-016 cannot be completed without CON-003
+CON-003,CON-017,requires_input,CON-017 cannot be completed without CON-003
+CON-003,CON-018,requires_input,CON-018 cannot be completed without CON-003
+CON-003,CON-019,requires_input,CON-019 cannot be completed without CON-003
+CON-003,CON-020,requires_input,CON-020 cannot be completed without CON-003
+ACQ-023,CLO-001,requires_input,CLO-001 cannot be completed without ACQ-023
+ACQ-023,CLO-002,requires_input,CLO-002 cannot be completed without ACQ-023
+ACQ-023,CLO-003,requires_input,CLO-003 cannot be completed without ACQ-023
+ACQ-023,CLO-004,requires_input,CLO-004 cannot be completed without ACQ-023
+ACQ-023,CLO-005,requires_input,CLO-005 cannot be completed without ACQ-023
+ACQ-023,CLO-006,requires_input,CLO-006 cannot be completed without ACQ-023
+ACQ-023,CLO-007,requires_input,CLO-007 cannot be completed without ACQ-023
+ACQ-023,CLO-008,requires_input,CLO-008 cannot be completed without ACQ-023
+CON-019,CLO-009,requires_input,CLO-009 cannot be completed without CON-019
+CON-019,CLO-010,requires_input,CLO-010 cannot be completed without CON-019
+CON-019,CLO-011,requires_input,CLO-011 cannot be completed without CON-019
+CON-019,CLO-012,requires_input,CLO-012 cannot be completed without CON-019
+CON-019,CLO-013,requires_input,CLO-013 cannot be completed without CON-019
+CON-019,CLO-014,requires_input,CLO-014 cannot be completed without CON-019
+CON-019,CLO-015,requires_input,CLO-015 cannot be completed without CON-019
+CON-019,CLO-016,requires_input,CLO-016 cannot be completed without CON-019
+CON-019,CLO-017,requires_input,CLO-017 cannot be completed without CON-019
+CON-019,CLO-018,requires_input,CLO-018 cannot be completed without CON-019
+CON-019,CLO-019,requires_input,CLO-019 cannot be completed without CON-019
+CON-019,CLO-020,requires_input,CLO-020 cannot be completed without CON-019
+SCR-003,SG-01,feeds_gate,SCR-003 is required evidence for SG-01 (Requirements approved)
+SCR-004,SG-01,feeds_gate,SCR-004 is required evidence for SG-01 (Requirements approved)
+DSN-001,SG-01,feeds_gate,DSN-001 is required evidence for SG-01 (Requirements approved)
+SCR-001,SG-02,feeds_gate,SCR-001 is required evidence for SG-02 (Candidate qualified)
+SCR-006,SG-02,feeds_gate,SCR-006 is required evidence for SG-02 (Candidate qualified)
+SCR-007,SG-02,feeds_gate,SCR-007 is required evidence for SG-02 (Candidate qualified)
+SCR-008,SG-02,feeds_gate,SCR-008 is required evidence for SG-02 (Candidate qualified)
+SCR-002,SG-02,feeds_gate,SCR-002 is required evidence for SG-02 (Candidate qualified)
+ACQ-003,SG-03,feeds_gate,ACQ-003 is required evidence for SG-03 (Application or offer ready)
+ACQ-007,SG-03,feeds_gate,ACQ-007 is required evidence for SG-03 (Application or offer ready)
+ACQ-008,SG-03,feeds_gate,ACQ-008 is required evidence for SG-03 (Application or offer ready)
+ACQ-013,SG-03,feeds_gate,ACQ-013 is required evidence for SG-03 (Application or offer ready)
+ACQ-014,SG-03,feeds_gate,ACQ-014 is required evidence for SG-03 (Application or offer ready)
+ACQ-017,SG-03,feeds_gate,ACQ-017 is required evidence for SG-03 (Application or offer ready)
+DD-001,SG-04,feeds_gate,DD-001 is required evidence for SG-04 (Due diligence accepted)
+DD-002,SG-04,feeds_gate,DD-002 is required evidence for SG-04 (Due diligence accepted)
+DD-026,SG-04,feeds_gate,DD-026 is required evidence for SG-04 (Due diligence accepted)
+DD-027,SG-04,feeds_gate,DD-027 is required evidence for SG-04 (Due diligence accepted)
+ACQ-019,SG-05,feeds_gate,ACQ-019 is required evidence for SG-05 (Closing authorized)
+ACQ-020,SG-05,feeds_gate,ACQ-020 is required evidence for SG-05 (Closing authorized)
+ACQ-022,SG-05,feeds_gate,ACQ-022 is required evidence for SG-05 (Closing authorized)
+ACQ-023,SG-05,feeds_gate,ACQ-023 is required evidence for SG-05 (Closing authorized)
+CLO-001,SG-05,feeds_gate,CLO-001 is required evidence for SG-05 (Closing authorized)
+CLO-002,SG-05,feeds_gate,CLO-002 is required evidence for SG-05 (Closing authorized)
+DSN-009,SG-06,feeds_gate,DSN-009 is required evidence for SG-06 (Design basis approved)
+DSN-010,SG-06,feeds_gate,DSN-010 is required evidence for SG-06 (Design basis approved)
+DSN-012,SG-06,feeds_gate,DSN-012 is required evidence for SG-06 (Design basis approved)
+DSN-014,SG-06,feeds_gate,DSN-014 is required evidence for SG-06 (Design basis approved)
+FIN-001,SG-07,feeds_gate,FIN-001 is required evidence for SG-07 (Financing and permit basis approved)
+FIN-002,SG-07,feeds_gate,FIN-002 is required evidence for SG-07 (Financing and permit basis approved)
+APR-001,SG-07,feeds_gate,APR-001 is required evidence for SG-07 (Financing and permit basis approved)
+APR-002,SG-07,feeds_gate,APR-002 is required evidence for SG-07 (Financing and permit basis approved)
+PRO-005,SG-08,feeds_gate,PRO-005 is required evidence for SG-08 (Procurement complete)
+PRO-006,SG-08,feeds_gate,PRO-006 is required evidence for SG-08 (Procurement complete)
+PRO-007,SG-08,feeds_gate,PRO-007 is required evidence for SG-08 (Procurement complete)
+PRO-010,SG-08,feeds_gate,PRO-010 is required evidence for SG-08 (Procurement complete)
+CON-001,SG-09,feeds_gate,CON-001 is required evidence for SG-09 (Notice to proceed authorized)
+CON-002,SG-09,feeds_gate,CON-002 is required evidence for SG-09 (Notice to proceed authorized)
+CON-003,SG-09,feeds_gate,CON-003 is required evidence for SG-09 (Notice to proceed authorized)
+APR-007,SG-09,feeds_gate,APR-007 is required evidence for SG-09 (Notice to proceed authorized)
+CON-007,SG-10,feeds_gate,CON-007 is required evidence for SG-10 (Construction payment approved)
+CON-008,SG-10,feeds_gate,CON-008 is required evidence for SG-10 (Construction payment approved)
+CON-014,SG-10,feeds_gate,CON-014 is required evidence for SG-10 (Construction payment approved)
+CON-019,SG-11,feeds_gate,CON-019 is required evidence for SG-11 (Occupancy or final completion approved)
+CLO-009,SG-11,feeds_gate,CLO-009 is required evidence for SG-11 (Occupancy or final completion approved)
+CLO-020,SG-11,feeds_gate,CLO-020 is required evidence for SG-11 (Occupancy or final completion approved)
+CLO-011,SG-12,feeds_gate,CLO-011 is required evidence for SG-12 (Compliance closed)
+CLO-012,SG-12,feeds_gate,CLO-012 is required evidence for SG-12 (Compliance closed)
+CLO-016,SG-12,feeds_gate,CLO-016 is required evidence for SG-12 (Compliance closed)
+CLO-018,SG-12,feeds_gate,CLO-018 is required evidence for SG-12 (Compliance closed)
+CLO-019,SG-12,feeds_gate,CLO-019 is required evidence for SG-12 (Compliance closed)

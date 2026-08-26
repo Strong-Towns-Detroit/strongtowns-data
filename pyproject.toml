@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "krabby-real-estate"
+version = "0.1.0"
+description = "Parcel-level data collection and accessibility analysis for Detroit"
+requires-python = ">=3.12"
+dependencies = [
+    "geopandas",
+    "matplotlib",
+    "networkx",
+    "numpy",
+    "osmnx>=2",
+    "pandas",
+    "python-dotenv",
+    "requests",
+    "scikit-learn",
+    "shapely>=2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+exclude = ["project"]
+line-length = 100
+target-version = "py312"

@@ -1,0 +1,28 @@
+{
+  "artifact_id": "DD-026",
+  "issue_id": "ISS-001",
+  "revision": "A",
+  "issue_purpose": "Counsel review of title and access findings prior to Gate SG-04",
+  "typst_source": "project/publication/typst/issues/DD-026-red-flag-memo.typ",
+  "typst_source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "source_markdown": "project/working/candidate-parcels/21001234/red-flag-memo.md",
+  "source_markdown_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "supporting_data": [
+    {
+      "path": "data/derived/parcel-routing-anchors.csv",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "role": "Accessibility figures cited in section 3"
+    }
+  ],
+  "typst_version": "0.14.2",
+  "compile_command": "typst compile <source> <pdf> --root <repo-root>",
+  "producer_git_commit": "0000000",
+  "issued_at": "2026-08-26",
+  "approver_role": "company_decision_authority",
+  "approver_name": null,
+  "visual_inspection_by": "contractor_program_manager",
+  "pdf_path": "project/publication/issued/DD-026/ISS-001/DD-026-ISS-001-A.pdf",
+  "pdf_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "supersedes_issue_id": null,
+  "confidentiality": "internal"
+}

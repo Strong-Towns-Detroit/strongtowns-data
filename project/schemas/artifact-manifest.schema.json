@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://krabby.local/schemas/artifact-manifest.schema.json",
+  "title": "Artifact manifest (Markdown YAML frontmatter)",
+  "description": "Every Markdown artifact in project/ carries this frontmatter. Validated by project/tools/validate.py.",
+  "type": "object",
+  "required": [
+    "artifact_id", "artifact_type", "title", "workstream", "status",
+    "owner_role", "required_reviewer_role", "legal_review_required",
+    "typst_issue_required", "created_at", "updated_at", "confidentiality"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "artifact_id": {
+      "type": "string",
+      "pattern": "^(GOV|SCR|PUB|ACQ|DD|DSN|FIN|APR|PRO|CON|CLO)-[0-9]{3}$",
+      "description": "Stable ID. Must exist in artifact-register.csv."
+    },
+    "artifact_type": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "workstream": {
+      "enum": ["governance", "parcel-screening", "acquisition", "due-diligence",
+               "design-feasibility", "finance", "approvals", "procurement",
+               "construction", "closing-compliance", "publication"]
+    },
+    "service_code": {
+      "enum": ["LND", "DSN", "PMT", "INS", "EST", "ADM"],
+      "description": "Contract Exhibit B service code. Time spent in this artifact bills under this code."
+    },
+    "status": {
+      "enum": ["template", "research_draft", "review_required",
+               "approved_for_internal_use", "approved_for_issue", "issued", "superseded"],
+      "description": "Document lifecycle status. Note: 'planned' is a REGISTER-ONLY state and is never valid in a file."
+    },
+    "template_version": { "type": ["string", "null"] },
+    "parcel_ids": { "type": "array", "items": { "type": "string" } },
+    "owner_role": { "type": "string", "minLength": 1 },
+    "decision_role": {
+      "type": "string",
+      "description": "Who decides. Under the ICA the Contractor recommends and the Company decides."
+    },
+    "required_reviewer_role": { "type": "string", "minLength": 1 },
+    "legal_review_required": { "type": "boolean" },
+    "typst_issue_required": { "type": "boolean" },
+    "typst_source": { "type": ["string", "null"] },
+    "latest_issue_id": { "type": ["string", "null"] },
+    "created_at": { "type": "string", "format": "date" },
+    "updated_at": { "type": "string", "format": "date" },
+    "source_as_of": {
+      "type": ["string", "null"], "format": "date",
+      "description": "Date external requirements were last re-verified. Distinct from updated_at."
+    },
+    "source_ids": { "type": "array", "items": { "type": "string" } },
+    "depends_on": { "type": "array", "items": { "type": "string" } },
+    "supersedes": { "type": ["string", "null"] },
+    "confidentiality": { "enum": ["public", "internal", "sensitive"] }
+  },
+  "allOf": [
+    {
+      "description": "A document that requires a Typst issue must name its source once it leaves draft.",
+      "if": {
+        "properties": {
+          "typst_issue_required": { "const": true },
+          "status": { "enum": ["approved_for_issue", "issued"] }
+        },
+        "required": ["typst_issue_required", "status"]
+      },
+      "then": { "required": ["typst_source", "latest_issue_id"] }
+    },
+    {
+      "description": "Anything citing external requirements must state when they were last verified.",
+      "if": { "properties": { "source_ids": { "minItems": 1 } }, "required": ["source_ids"] },
+      "then": { "required": ["source_as_of"] }
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+"""Shared map rendering primitives."""
