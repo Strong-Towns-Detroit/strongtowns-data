@@ -10,6 +10,8 @@ cache/
 output/
 data/raw/
 data/derived/
+data/sources/
+data/provider/
 
 # --- project/ artifact workspace ---------------------------------------------
 # Ordinary Typst builds are disposable; only issued PDFs under

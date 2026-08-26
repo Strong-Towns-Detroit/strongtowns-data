@@ -1,37 +1,23 @@
 # Krabby Real Estate
 
 Parcel-level data collection and accessibility analysis for Krabby's Detroit home search.
+The parcel is the unit of analysis. Neighborhood labels may be attached later, but they do
+not constrain collection, accessibility, or aggregation.
 
-The parcel is the unit of analysis. Neighborhoods may be attached later as descriptive
-labels, but they do not constrain data collection, define accessibility, or determine how
-results are aggregated. An unusually strong parcel in a weaker neighborhood must remain
-visible.
-
-## Current pipeline
+## Contract-first data engine
 
 ```text
-Detroit parcel catalog
-        │
-        └── parcel geometry
-Detroit Base Units
-        │
-        ├── address↔parcel↔street relationships
-        └── one or more parcel routing anchors
-        │
-Citywide POI catalog
-        │
-        └── source identity + source tags + routing point
-                         │
-                         ▼
-            TravelTime polygon collection
-            ├── departure polygons from each parcel
-            └── arrival polygons to each parcel
+Detroit parcels + Base Units ──> parcel routing anchors ──┐
+                                                         ├──> TravelTime request/result ledger
+broad OSM business catalog ──> verified destinations ────┘
 ```
 
-These stages collect facts. Business classification, spatial joins, exact travel-time
-matrices, quality review, and parcel scoring are deliberately downstream.
+Every production dataset is an immutable snapshot with a versioned schema, hashes, row
+accounting, and pinned parent manifests. A promotion pointer is only a discovery aid;
+downstream runs resolve it to an immutable manifest hash before use.
 
-See [the pipeline contracts](docs/data-pipeline.md) for precise inputs and outputs.
+Business classification, spatial joins, exact travel-time matrices, continuous decay, and
+parcel scoring are deliberately downstream of this collection foundation.
 
 ## Setup
 
@@ -42,104 +28,67 @@ uv sync --extra dev
 uv run pytest -q
 ```
 
-## Collect the citywide OSM POI catalog
+## Data lifecycle
 
-This broad collection includes all mapped `shop`, `amenity`, `leisure`, `tourism`, `office`,
-and `craft` features. It does not decide which records count as groceries.
-
-```bash
-uv run python pipelines/collect_osm_pois.py \
-  --place "Detroit, Michigan, USA" \
-  --output-dir data/raw/pois/osm/2026-08-26
-```
-
-The stage writes the original OSM geometries, normalized routing points, and a collection
-manifest separately.
-
-## Fetch Base Units and build parcel routing anchors
-
-First snapshot the current parcel catalog (the City export is large and may take time to
-generate):
+Inspect the registered assets and dependency graph:
 
 ```bash
-uv run python pipelines/fetch_parcels.py \
-  --output-dir data/raw/parcels/2026-08-26
+uv run krabby-data list
+uv run krabby-data graph
+uv run krabby-data status
 ```
 
-Base Units is collected as three independent, resumable source snapshots. The page cache can
-be retained to resume interrupted citywide downloads.
+The initial source files predate this engine. Register their actual bytes without inventing
+historical URLs or timestamps, then promote only from a clean committed implementation:
 
 ```bash
-uv run python pipelines/fetch_base_units.py \
-  --output-dir data/raw/base-units/2026-08-26
+uv run krabby-data import-legacy
+# Inspect each completed manifest under data/sources/*/snapshots/.
+uv run krabby-data import-legacy --promote
 ```
 
-Build anchors only after the parcel, address, and street snapshots are fixed:
+Future source refreshes are explicit network operations and also remain unpromoted unless
+requested:
 
 ```bash
-uv run python pipelines/build_parcel_routing_anchors.py \
-  --parcels data/raw/parcels/2026-08-26/parcels.geojson \
-  --addresses data/raw/base-units/2026-08-26/base_units_addresses.geojson \
-  --streets data/raw/base-units/2026-08-26/base_units_streets.geojson \
-  --buildings data/raw/base-units/2026-08-26/base_units_buildings.geojson \
-  --output-gpkg data/derived/parcel-routing-anchors.gpkg \
-  --output-csv data/derived/parcel-routing-anchors.csv
+uv run krabby-data fetch parcels --apply
+uv run krabby-data fetch base-units --apply
+uv run krabby-data fetch osm-pois --apply
 ```
 
-An address-linked street gets an anchor projected onto the inferred street-facing parcel
-edge. Corner and through parcels can therefore retain multiple anchors. Parcels without a
-usable address↔street link receive an explicitly low-confidence nearest-street fallback.
-
-Generate source-relation statistics, flagged review layers, distance outliers, and a compact
-citywide QA map:
+Build the offline canonical and routing chain. A staging-only run may use dirty code;
+promotion may not.
 
 ```bash
-uv run python pipelines/audit_parcel_routing_anchors.py \
-  --anchors-gpkg data/derived/parcel-routing-anchors.gpkg \
-  --parcels data/raw/parcels/2026-08-26/parcels.geojson \
-  --addresses data/raw/base-units/2026-08-26/base_units_addresses.geojson \
-  --streets data/raw/base-units/2026-08-26/base_units_streets.geojson \
-  --output-dir output/parcel-routing-qa/2026-08-26
+uv run krabby-data build --no-promote
+uv run krabby-data build
 ```
 
-The QA thresholds select records for inspection; they do not exclude parcels or alter the
-underlying evidence.
-
-## Generate per-parcel TravelTime polygons
-
-Input CSV:
-
-```csv
-parcel_id,anchor_id,latitude,longitude
-01000001.,01000001-1001-1,42.3501,-83.0812
-01000002.,01000002-1001-1,42.3504,-83.0808
-```
-
-Set credentials without committing them:
+TravelTime requests require an explicit timezone-aware reference time. Arrival and departure,
+walking, and a 3,600-second horizon are the defaults:
 
 ```bash
-export TRAVELTIME_APP_ID=...
-export TRAVELTIME_API_KEY=...
+uv run krabby-data build prepare.traveltime-requests \
+  --parameter reference_time_utc=2026-08-26T16:00:00Z \
+  --parameter anchor_uuids=<one-reviewed-anchor-uuid>
 ```
 
-Collect both directions for a one-hour walking horizon:
+Paid collection is never part of `build`. The smoke path requires one anchor and no more than
+the two directional requests:
 
 ```bash
-uv run python pipelines/build_traveltime_polygons.py \
-  --parcels data/derived/parcel-routing-anchors.csv \
-  --direction departure \
-  --direction arrival \
-  --transportation walking \
-  --travel-time-seconds 3600 \
-  --reference-time 2026-08-26T12:00:00-04:00 \
-  --output data/raw/traveltime/walking-3600.geojson
+uv run krabby-data fetch traveltime --apply --allow-paid --smoke
 ```
 
-The client batches requests at TravelTime's ten-search limit and writes a credential-free
-manifest beside the GeoJSON. Each polygon is keyed to both `parcel_id` and `anchor_id`.
+Review queues are parent-pinned and round-trippable:
 
-## Tooling lineage
+```bash
+uv run krabby-data review export output/anchor-review.gpkg
+uv run krabby-data review import output/anchor-review.gpkg
+```
 
-The geospatial foundation selectively reuses John Bolt's private
-`Strong-Towns-Detroit/strong-towns-detroit-mono-repo`. See
-[the reuse boundary](docs/strong-towns-reuse.md).
+See [the engine lifecycle](docs/data-engine.md),
+[the dataset contracts](docs/data-pipeline.md), and
+[the Strong Towns reuse boundary](docs/strong-towns-reuse.md). Scripts under `pipelines/`
+remain migration references; production builds consume registered asset IDs, not arbitrary
+input paths.

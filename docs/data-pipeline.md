@@ -1,109 +1,69 @@
 # Parcel data-pipeline contracts
 
-## Governing rule
+The parcel is the unit of analysis. Neighborhood labels may be attached downstream but never
+preselect or average away a parcel.
 
-`parcel_id` is the analytical key. Neighborhood membership is optional downstream metadata.
-No stage may discard, average away, or preselect a parcel because of its neighborhood.
+## Sources and canonical tables
 
-## Pipe 0: versioned source snapshots
+Parcels, Base Units addresses, streets, buildings, and broad OSM POIs enter as immutable raw
+snapshots. Canonicalization preserves raw identity as text, uses explicit normalized join
+keys, emits typed GeoParquet, and reconciles every input as accepted or rejected. Existing
+2026-08-26 files have fixed migration baselines: 377,940 parcels, 486,646 addresses, 36,104
+streets, 364,096 buildings, and 15,202 OSM candidates.
 
-The current Detroit parcel source is ArcGIS item `3c784c118e5c4083b37038e9b38573df`,
-`Parcels (Current)`. The older item `9ca25373d4f747be85850344186dda3c` is now labeled
-`Parcels (Deprecated)` and must not silently replace it.
+ArcGIS acquisition fingerprints layer metadata, schema, last edit time, and the complete
+object-ID set before and after pagination. A changed source, duplicate ID, incomplete page,
+or server/local count mismatch rejects the attempt. Page caches are scoped to that complete
+fingerprint.
 
-The Base Units adapter independently snapshots addresses, streets, and buildings from the
-City's `BaseUnitFeatures` FeatureServer. Retrieval is object-ID paged, resumable, atomic per
-page, and accompanied by counts and SHA-256 manifests. Raw records remain raw evidence.
+OSM keeps its source geometry separate from its routing point. Source tags and categories are
+typed key/value collections. A point uses `source_point`; a non-point uses a labeled
+`representative_point`. Grocery interpretation remains downstream.
 
-## Pipe 1: parcel routing anchors
+## Routing anchors
 
-The implemented anchor stage joins Base Units addresses to parcels by normalized `parcel_id`,
-then addresses to centerlines by `street_id`. It estimates the parcel edge facing each linked
-street and projects the linked address point onto that edge. This represents the pedestrian
-connection between parcel and street; it does not assert the location of a building entrance.
+Each parcel/street candidate receives a stable UUIDv5 derived from a versioned natural-key
+tuple. Address evidence, frontage geometry, and review disposition are separate datasets.
+Base Units `address_id` is distinct from the source snapshot-row object ID.
 
-Corner and through parcels may emit multiple anchors. When no usable address↔street relation
-exists, the stage emits a low-confidence anchor at the midpoint of the edge facing the nearest
-Base Units street. It does not silently discard duplicate normalized parcel IDs.
+The structural gates require unique keys, valid WGS84 geometry, exactly one frontage per
+anchor, linked-address evidence for linked anchors, no evidence for fallbacks, and a maximum
+0.01-US-survey-foot distance from the parcel boundary. Building count is null only when the
+building source was not supplied and zero when a supplied source matched none.
 
-Minimum contract:
+Review state controls provider eligibility:
 
-| Field | Meaning |
-|---|---|
-| `parcel_id` | Stable City of Detroit parcel identifier |
-| `parcel_key` | Normalized cross-source parcel join key |
-| `anchor_id` | Stable key for this parcel/street anchor |
-| `street_id` | Base Units street relation used |
-| `latitude` / `longitude` | WGS84 coordinate on the selected parcel edge |
-| `routing_anchor_method` | Address projection, linked-edge midpoint, or nearest-street fallback |
-| `frontage_source` | Whether evidence came from a Base Units relation or fallback |
-| `frontage_confidence` / `anchor_confidence` | Geometry and overall evidence confidence |
-| `address_objectids_json` | Base Units address records supporting the anchor |
+- `not_required` and `approved` are eligible;
+- `required` needs a recorded per-anchor override;
+- `rejected` is never eligible;
+- fallback, low/not-evaluated confidence, or street distance over 80 feet requires review.
 
-The GeoPackage retains point anchors and the inferred front-edge geometries. The companion CSV
-is the direct TravelTime input. A manifest hashes every input snapshot.
+Review CSV/GeoPackage exports carry immutable anchor and disposition parent hashes. Imports
+reject stale parents, unknown or duplicate UUIDs, invalid states, and incomplete decisions.
 
-The separate QA stage reconciles source relations against the output, reports confidence and
-street-distance distributions, and emits review geometries for fallbacks, multiple anchors,
-and front edges more than 80 feet from their linked centerline. The 80-foot criterion mirrors
-the geometry model's high-confidence boundary; it is a review flag, not an analytical cutoff.
-Parcel improvement status and property class are attached only to the review artifact.
+## TravelTime ledger
 
-## Pipe 2: citywide POI catalog
+The request dataset is promoted before provider contact. UUIDv5 request identity includes the
+anchor UUID, direction, mode, horizon, UTC reference time, provider, and request-contract
+version. Provider search IDs are opaque and explicitly mapped back to request UUIDs.
 
-The first source adapter collects broad OpenStreetMap features across Detroit. It stores:
+Both arrival and departure from the same point are supported. Walking requests enforce a
+3,600-second absolute upper limit; continuous decay and parcel scoring are later pipes.
 
-1. raw source geometry, unchanged except for GeoJSON serialization;
-2. one normalized routing point per feature;
-3. source identity and selected original tags;
-4. a timestamped manifest.
-
-Minimum normalized contract:
-
-| Field | Meaning |
-|---|---|
-| `poi_id` | Namespaced stable identifier, such as `osm:node:123` |
-| `source` / `source_id` | Provenance and source record identity |
-| `name` | Best available source name |
-| `primary_category` / `category_value` | Uninterpreted source classification |
-| `source_geometry_type` | Original Point/Polygon/etc. |
-| `latitude` / `longitude` | Routing point |
-| `source_tags_json` | Preserved source attributes used for later classification |
-
-Additional adapters can emit the same contract. Cross-source entity resolution is a later
-pipe; no source record should be lost during collection.
-
-## Pipe 3: TravelTime polygons
-
-Inputs are parcel routing anchors and explicit time-map specifications:
-
-| Parameter | Example |
-|---|---|
-| direction | `departure`, `arrival` |
-| transportation | `walking` |
-| travel-time horizon | `3600` seconds |
-| reference time | timezone-aware ISO-8601 timestamp |
-
-Each TravelTime search ID embeds the parcel and anchor keys, direction, mode, and horizon:
+Every raw provider response is immutable evidence. A batch is valid only when:
 
 ```text
-parcel:01000001.:anchor:01000001-1001-1:departure:walking:3600
-parcel:01000001.:anchor:01000001-1001-1:arrival:walking:3600
+expected request IDs = successful result IDs + explicit provider error IDs
 ```
 
-The output is a GeoJSON FeatureCollection plus a credential-free request manifest. Polygons
-remain individual and parcel/anchor-keyed. Union, intersection, business selection, and
-scoring do not belong in this collection stage. Multiple anchors are preserved rather than
-combined by this pipe.
+Missing, duplicate, unexpected, empty, malformed, or non-polygon results reject the attempt.
+Transport, rate-limit, and server failures receive at most five bounded exponential-backoff
+attempts, respecting `Retry-After`. Any terminal provider result leaves the attempt staged and
+prevents result promotion. The only initially authorized live operation is one reviewed
+anchor, walking, 3,600 seconds, in both directions.
 
-Grocery destinations will use their own entrance-quality field. Base Units footprints,
-imagery, and human review can establish those entrances; a VLM may propose candidates but is
-not treated as authoritative evidence.
+## Later pipes
 
-## Next pipes—not part of the current implementation
-
-1. spatially join POIs to parcel time-map polygons;
-2. classify and verify businesses, beginning with groceries;
-3. request exact directional parcel-to-POI travel-time matrices;
-4. attach optional neighborhood and corridor labels;
-5. build continuous-decay and other parcel-comparison models.
+Business verification, parcel/POI spatial joins, exact travel-time matrices, continuous-decay
+scores, and optional neighborhood or corridor labels remain downstream of this collection
+foundation.

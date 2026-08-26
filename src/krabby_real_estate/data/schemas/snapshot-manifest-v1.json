@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "krabby:snapshot-manifest:1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifest_contract_version", "dataset_contract_id", "dataset_contract_version",
+    "schema_hash", "asset_id", "snapshot_id", "tier", "status", "provenance_grade",
+    "producer", "started_at", "completed_at", "acquisition_fingerprint", "parameters",
+    "parents", "counts", "rejection_counts_by_reason", "crs", "geometry_types",
+    "artifacts", "archive_tier", "archive_status"
+  ],
+  "properties": {
+    "manifest_contract_version": {"const": "1.0.0"},
+    "dataset_contract_id": {"type": "string"},
+    "dataset_contract_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "schema_hash": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+    "asset_id": {"type": "string"},
+    "snapshot_id": {"type": "string", "format": "uuid"},
+    "tier": {"enum": ["source", "derived", "provider"]},
+    "status": {"const": "complete"},
+    "provenance_grade": {"enum": ["native", "legacy", "best_effort"]},
+    "producer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["package_version", "git_commit", "git_clean"],
+      "properties": {
+        "package_version": {"type": "string"},
+        "git_commit": {"type": ["string", "null"]},
+        "git_clean": {"type": "boolean"}
+      }
+    },
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "acquisition_fingerprint": {"type": ["object", "null"]},
+    "parameters": {"type": "object"},
+    "parents": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["asset_id", "snapshot_id", "manifest_path", "manifest_sha256"],
+        "properties": {
+          "asset_id": {"type": "string"},
+          "snapshot_id": {"type": "string"},
+          "manifest_path": {"type": "string"},
+          "manifest_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        }
+      }
+    },
+    "counts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["input", "accepted", "rejected"],
+      "properties": {
+        "input": {"type": "integer", "minimum": 0},
+        "accepted": {"type": "integer", "minimum": 0},
+        "rejected": {"type": "integer", "minimum": 0}
+      }
+    },
+    "rejection_counts_by_reason": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+    "crs": {"type": ["string", "null"]},
+    "geometry_types": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "artifacts": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["role", "path", "media_type", "bytes", "sha256", "record_count", "schema_hash", "crs", "geometry_types"],
+        "properties": {
+          "role": {"type": "string"},
+          "path": {"type": "string"},
+          "media_type": {"type": "string"},
+          "bytes": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "record_count": {"type": ["integer", "null"], "minimum": 0},
+          "schema_hash": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+          "crs": {"type": ["string", "null"]},
+          "geometry_types": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+        }
+      }
+    },
+    "archive_tier": {"const": "local_only"},
+    "archive_status": {"const": "not_configured"}
+  }
+}

@@ -15,6 +15,7 @@ def response(payload):
 def test_fetch_layer_writes_snapshot_manifest_and_reuses_valid_pages(tmp_path):
     session = MagicMock()
     session.post.side_effect = [
+        response({"id": 0, "name": "Addresses", "fields": []}),
         response({"objectIds": [1, 2]}),
         response(
             {
@@ -25,6 +26,8 @@ def test_fetch_layer_writes_snapshot_manifest_and_reuses_valid_pages(tmp_path):
                 ],
             }
         ),
+        response({"id": 0, "name": "Addresses", "fields": []}),
+        response({"objectIds": [1, 2]}),
     ]
     layer = LayerDefinition("addresses", 0)
 
@@ -37,9 +40,14 @@ def test_fetch_layer_writes_snapshot_manifest_and_reuses_valid_pages(tmp_path):
     assert len(json.loads(destination.read_text())["features"]) == 2
 
     resumed = MagicMock()
-    resumed.post.return_value = response({"objectIds": [1, 2]})
+    resumed.post.side_effect = [
+        response({"id": 0, "name": "Addresses", "fields": []}),
+        response({"objectIds": [1, 2]}),
+        response({"id": 0, "name": "Addresses", "fields": []}),
+        response({"objectIds": [1, 2]}),
+    ]
     _destination, resumed_manifest = fetch_layer(layer, tmp_path, session=resumed, pause_seconds=0)
-    assert resumed.post.call_count == 1
+    assert resumed.post.call_count == 4
     assert resumed_manifest["downloaded_pages"] == 0
     assert resumed_manifest["reused_pages"] == 1
 
@@ -47,6 +55,7 @@ def test_fetch_layer_writes_snapshot_manifest_and_reuses_valid_pages(tmp_path):
 def test_fetch_layer_rejects_incomplete_arcgis_page(tmp_path):
     session = MagicMock()
     session.post.side_effect = [
+        response({"id": 0, "name": "Addresses", "fields": []}),
         response({"objectIds": [1, 2]}),
         response(
             {
@@ -57,4 +66,23 @@ def test_fetch_layer_rejects_incomplete_arcgis_page(tmp_path):
     ]
 
     with pytest.raises(RuntimeError, match="incomplete addresses page"):
+        fetch_layer(LayerDefinition("addresses", 0), tmp_path, session=session, pause_seconds=0)
+
+
+def test_fetch_layer_rejects_source_drift_during_pagination(tmp_path):
+    session = MagicMock()
+    session.post.side_effect = [
+        response({"id": 0, "name": "Addresses", "fields": []}),
+        response({"objectIds": [1]}),
+        response(
+            {
+                "type": "FeatureCollection",
+                "features": [{"type": "Feature", "properties": {"objectid": 1}, "geometry": None}],
+            }
+        ),
+        response({"id": 0, "name": "Addresses", "fields": []}),
+        response({"objectIds": [1, 2]}),
+    ]
+
+    with pytest.raises(RuntimeError, match="changed during pagination"):
         fetch_layer(LayerDefinition("addresses", 0), tmp_path, session=session, pause_seconds=0)

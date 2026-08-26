@@ -58,8 +58,8 @@ def normalize_relationship_id(value):
     return cleaned or None
 
 
-def _address_object_ids(group) -> list[str]:
-    for field in ("objectid", "OBJECTID"):
+def _relationship_values(group, fields) -> list[str]:
+    for field in fields:
         if field in group:
             return sorted(
                 {
@@ -69,6 +69,30 @@ def _address_object_ids(group) -> list[str]:
                 }
             )
     return []
+
+
+def _address_evidence(group) -> list[dict[str, str]]:
+    records = []
+    for _, row in group.iterrows():
+        address_id = next(
+            (
+                normalize_relationship_id(row.get(field))
+                for field in ("address_id", "objectid", "OBJECTID")
+                if field in group and normalize_relationship_id(row.get(field))
+            ),
+            None,
+        )
+        source_object_id = next(
+            (
+                normalize_relationship_id(row.get(field))
+                for field in ("source_object_id", "objectid", "OBJECTID")
+                if field in group and normalize_relationship_id(row.get(field))
+            ),
+            None,
+        )
+        if address_id and source_object_id:
+            records.append({"address_id": address_id, "source_object_id": source_object_id})
+    return sorted(records, key=lambda item: (item["address_id"], item["source_object_id"]))
 
 
 def _linked_building_counts(buildings: gpd.GeoDataFrame | None) -> dict[str, int]:
@@ -180,10 +204,16 @@ def build_parcel_routing_anchors(
                 method = "nearest_street_front_edge_midpoint"
                 anchor = edge.interpolate(0.5, normalized=True)
                 address_ids = []
+                address_source_object_ids = []
+                address_evidence = []
             else:
                 source = "base_units_address_link"
                 anchor, method = _anchor_on_edge(edge, address_group.geometry.tolist())
-                address_ids = _address_object_ids(address_group)
+                address_evidence = _address_evidence(address_group)
+                address_ids = sorted({item["address_id"] for item in address_evidence})
+                address_source_object_ids = sorted(
+                    {item["source_object_id"] for item in address_evidence}
+                )
             method_counts[method] += 1
             anchor_id = f"{parcel.parcel_key}-{street_key}-{sequence}"
             records.append(
@@ -201,7 +231,10 @@ def build_parcel_routing_anchors(
                     "geometry_frontage_ft": frontage["geometry_frontage"],
                     "edge_to_street_distance_ft": frontage["edge_to_street_distance"],
                     "angle_difference_degrees": frontage["angle_difference"],
-                    "address_objectids_json": json.dumps(address_ids),
+                    "address_objectids_json": json.dumps(address_source_object_ids),
+                    "address_ids": address_ids,
+                    "address_source_object_ids": address_source_object_ids,
+                    "address_evidence": address_evidence,
                     "linked_current_building_count": int(building_counts.get(parcel.parcel_key, 0)),
                 }
             )

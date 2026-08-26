@@ -66,6 +66,51 @@ def _returned_ids(payload: dict) -> set[int]:
     return returned
 
 
+def _layer_fingerprint(metadata: dict, object_ids: list[int]) -> dict:
+    """Capture only source facts that must remain stable throughout pagination."""
+    fields = [
+        {
+            "name": field.get("name"),
+            "type": field.get("type"),
+            "alias": field.get("alias"),
+        }
+        for field in metadata.get("fields", [])
+    ]
+    stable = {
+        "id": metadata.get("id"),
+        "name": metadata.get("name"),
+        "type": metadata.get("type"),
+        "geometryType": metadata.get("geometryType"),
+        "objectIdField": metadata.get("objectIdField"),
+        "fields": fields,
+        "spatialReference": metadata.get("extent", {}).get("spatialReference"),
+        "lastEditDate": metadata.get("editingInfo", {}).get("lastEditDate"),
+        "object_id_count": len(object_ids),
+        "object_ids_sha256": hashlib.sha256(",".join(map(str, object_ids)).encode()).hexdigest(),
+    }
+    stable["fingerprint_sha256"] = hashlib.sha256(
+        json.dumps(stable, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return stable
+
+
+def _source_state(session, layer_url: str, *, timeout: int) -> tuple[dict, list[int]]:
+    metadata = _post_json(session, layer_url, {"f": "json"}, timeout=timeout)
+    payload = _post_json(
+        session,
+        f"{layer_url}/query",
+        {"where": "1=1", "returnIdsOnly": "true", "f": "json"},
+        timeout=timeout,
+    )
+    raw_ids = payload.get("objectIds")
+    if not isinstance(raw_ids, list):
+        raise TypeError("ArcGIS object-ID response is malformed")
+    object_ids = [int(object_id) for object_id in raw_ids]
+    if len(set(object_ids)) != len(object_ids):
+        raise RuntimeError("ArcGIS object-ID response contains duplicates")
+    return metadata, sorted(object_ids)
+
+
 def _valid_page(path: Path, expected_ids: set[int]) -> bool:
     if not path.exists():
         return False
@@ -105,20 +150,18 @@ def fetch_layer(
     timeout: int = 120,
     pause_seconds: float = 0.05,
     discard_pages: bool = False,
+    page_cache_root: Path | None = None,
 ) -> tuple[Path, dict]:
     """Fetch one Base Units layer in resumable pages and write a source manifest."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    page_dir = output_dir / f".{layer.name}_pages"
-    page_dir.mkdir(exist_ok=True)
-    query_url = f"{BASE_UNITS_SERVICE}/{layer.layer_id}/query"
-    object_ids = _post_json(
-        session,
-        query_url,
-        {"where": "1=1", "returnIdsOnly": "true", "f": "json"},
-        timeout=timeout,
-    ).get("objectIds", [])
-    object_ids = sorted(int(object_id) for object_id in object_ids)
+    page_dir = Path(page_cache_root or output_dir / f".{layer.name}_pages")
+    layer_url = f"{BASE_UNITS_SERVICE}/{layer.layer_id}"
+    query_url = f"{layer_url}/query"
+    metadata_before, object_ids = _source_state(session, layer_url, timeout=timeout)
+    fingerprint_before = _layer_fingerprint(metadata_before, object_ids)
+    page_dir = page_dir / fingerprint_before["fingerprint_sha256"]
+    page_dir.mkdir(parents=True, exist_ok=True)
 
     page_paths = []
     downloaded_pages = 0
@@ -156,6 +199,13 @@ def fetch_layer(
         downloaded_pages += 1
         time.sleep(pause_seconds)
 
+    metadata_after, object_ids_after = _source_state(session, layer_url, timeout=timeout)
+    fingerprint_after = _layer_fingerprint(metadata_after, object_ids_after)
+    if fingerprint_before != fingerprint_after:
+        raise RuntimeError(
+            f"ArcGIS {layer.name} layer changed during pagination; snapshot rejected"
+        )
+
     destination = output_dir / f"base_units_{layer.name}.geojson"
     feature_count = _write_feature_collection(page_paths, destination)
     manifest = {
@@ -163,11 +213,13 @@ def fetch_layer(
         "service": BASE_UNITS_SERVICE,
         "layer": asdict(layer),
         "object_id_count": len(object_ids),
+        "source_fingerprint_before": fingerprint_before,
+        "source_fingerprint_after": fingerprint_after,
         "feature_count": feature_count,
         "page_size": PAGE_SIZE,
         "downloaded_pages": downloaded_pages,
         "reused_pages": reused_pages,
-        "output": str(destination),
+        "output": destination.name,
         "sha256": _sha256(destination),
     }
     manifest_path = output_dir / f"base_units_{layer.name}.manifest.json"

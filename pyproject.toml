@@ -9,11 +9,13 @@ description = "Parcel-level data collection and accessibility analysis for Detro
 requires-python = ">=3.12"
 dependencies = [
     "geopandas",
+    "jsonschema>=4.26.0",
     "matplotlib",
     "networkx",
     "numpy",
     "osmnx>=2",
     "pandas",
+    "pyarrow>=25.0.1",
     "python-dotenv",
     "requests",
     "scikit-learn",
@@ -25,6 +27,12 @@ dev = [
     "pytest",
     "ruff",
 ]
+
+[project.scripts]
+krabby-data = "krabby_real_estate.data.cli:main"
+
+[tool.setuptools.package-data]
+"krabby_real_estate.data" = ["schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
