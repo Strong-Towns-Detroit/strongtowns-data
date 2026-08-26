@@ -115,11 +115,29 @@ filed, not authored. Authoring one would be evidence of a duty the Agreement dis
 ## Checks
 
 ```bash
-python3 project/tools/validate.py      # register integrity + frontmatter + issue manifests
+python3 project/tools/validate.py      # registers, frontmatter, cross-refs, source captures
 ./project/tools/compile-check.sh       # Typst library and template compile gate
+./project/tools/refresh-sources.sh     # re-download sources, diff against registered hashes
 ```
 
-Both must pass before any stage gate is recorded.
+`validate.py` and `compile-check.sh` must pass before any stage gate is recorded.
+`refresh-sources.sh` is drift detection: a changed hash means an agency republished a
+document, and every artifact citing it is now suspect.
+
+To issue a controlled PDF: `./project/tools/issue.sh` — it refuses on a dirty working tree,
+refuses on compile warnings, refuses to overwrite an existing issue, and records every hash.
+It does not decide the document is correct; a person still has to read the PDF.
+
+## Current state
+
+All 175 registered artifacts have files. No PDF has been formally issued — issuance requires
+approvals that do not exist yet, and `issue.sh` additionally requires a committed tree.
+
+Source research covers DLBA disposition and Detroit permitting. Twenty sources are registered;
+six are archived and hashed. Three conflicts between official sources are recorded as conflicts
+rather than resolved, and five sources are known to exist but have not been retrieved. Every one
+of those states is visible in `source-register.csv` and surfaces as a warning from
+`validate.py` when an artifact leans on it.
 
 ## Reading order
 

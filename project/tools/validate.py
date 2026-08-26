@@ -216,31 +216,107 @@ for e in csv.DictReader(open(ROOT / "dependency-register.csv")):
         bad("dependencies", f"unknown to_id {tgt}")
 
 # ------------------------------------------------------------------ 6. sources
+#
+# Qualitative sources -- board-adopted PDFs, agency web pages -- are the bulk of
+# what governs these pathways, and they change without versioning or notice. The
+# register therefore tracks four things a bare URL cannot: the adoption date
+# (distinct from the retrieval date), a pinpoint citation, an archived local
+# capture, and that capture's hash so drift is detectable.
+SRC_STATUSES = {"verified", "unavailable", "conflicting", "superseded",
+                "not_found", "listed_not_retrieved"}
+ENVIRONMENTS = {"production", "qa", "staging", "archived"}
+
 src_rows = list(csv.DictReader(open(ROOT / "source-register.csv")))
 sources = {}
-for s in src_rows:
-    sid = s["source_id"]
+captures = 0
+for s_ in src_rows:
+    sid = s_["source_id"]
     if sid in sources:
         bad("sources", f"duplicate source_id {sid}")
-    if not s["retrieved_at"]:
+    if not re.match(r"^SRC-\d{3}$", sid):
+        bad("sources", f"malformed source_id {sid!r}")
+    if not s_["retrieved_at"]:
         bad("sources", f"{sid}: missing retrieved_at; an undated citation cannot be re-verified")
-    if not s["url"]:
+    if not s_["url"]:
         bad("sources", f"{sid}: missing url")
-    if s["environment"] not in ("production", "qa", "staging", "archived"):
-        bad("sources", f"{sid}: unknown environment {s['environment']!r}")
-    if s["verification_status"] not in ("verified", "unavailable", "conflicting",
-                                        "superseded", "not_found"):
-        bad("sources", f"{sid}: unknown verification_status {s['verification_status']!r}")
-    sources[sid] = s
+    if s_["environment"] not in ENVIRONMENTS:
+        bad("sources", f"{sid}: unknown environment {s_['environment']!r}")
+    if s_["verification_status"] not in SRC_STATUSES:
+        bad("sources", f"{sid}: unknown verification_status {s_['verification_status']!r}")
+    # A source we claim to have verified must say WHERE in the document.
+    if s_["verification_status"] == "verified" and not s_["pinpoint"]:
+        bad("sources", f"{sid}: verified but no pinpoint citation; "
+                       "'the whole document' is not a citation")
+    # A conflict must name its counterpart, and that counterpart must exist.
+    if s_["verification_status"] == "conflicting" and not s_["conflicts_with"]:
+        bad("sources", f"{sid}: status conflicting but conflicts_with is empty")
+    # An archived capture must actually be on disk and must still hash correctly.
+    cp, ch = s_["capture_path"], s_["capture_sha256"]
+    if cp and not ch:
+        bad("sources", f"{sid}: capture_path set but capture_sha256 empty")
+    if ch and not cp:
+        bad("sources", f"{sid}: capture_sha256 set but capture_path empty")
+    if cp:
+        f_ = ROOT / cp
+        if not f_.exists():
+            bad("sources", f"{sid}: capture_path {cp} does not exist")
+        else:
+            captures += 1
+            got = hashlib.sha256(f_.read_bytes()).hexdigest()
+            if got != ch:
+                bad("sources", f"{sid}: archived capture has changed on disk "
+                               f"(register {ch[:12]}\u2026, file {got[:12]}\u2026)")
+    # Anything we have not actually read must not be cited as if we had.
+    if s_["verification_status"] == "listed_not_retrieved" and s_["pinpoint"]:
+        soft("sources", f"{sid}: not retrieved, but carries a pinpoint citation")
+    sources[sid] = s_
+
+for s_ in src_rows:
+    for other in filter(None, (s_["conflicts_with"], s_["superseded_by"])):
+        if other not in sources:
+            bad("sources", f"{s_['source_id']}: references unknown source {other}")
+
+# supports_artifact_ids must resolve, in both directions.
+for s_ in src_rows:
+    for aid in filter(None, s_["supports_artifact_ids"].split(";")):
+        if aid not in reg:
+            bad("sources", f"{s_['source_id']}: supports unknown artifact {aid}")
+
 for aid, r in reg.items():
     if r["status"] in REGISTER_ONLY:
         continue
-    p = ROOT / r["file_path"]
-    if p.is_file() and p.suffix == ".md":
-        fm = parse_frontmatter(p.read_text()) or {}
+    p_ = ROOT / r["file_path"]
+    if p_.is_file() and p_.suffix == ".md":
+        fm = parse_frontmatter(p_.read_text()) or {}
         for sid in fm.get("source_ids") or []:
             if sid not in sources:
                 bad("sources", f"{aid}: cites {sid}, which is not in source-register.csv")
+            elif sources[sid]["verification_status"] == "listed_not_retrieved":
+                soft("sources", f"{aid}: cites {sid}, which has not been retrieved yet")
+
+# ------------------------------------------------- 6b. body cross-references
+#
+# Artifact bodies reference other artifacts and sources by ID constantly. A typo
+# produces a pointer that looks authoritative and goes nowhere, which is worse
+# than no pointer -- a reader follows it, finds nothing, and assumes the evidence
+# exists elsewhere.
+XREF = re.compile(r"`((?:GOV|SCR|PUB|ACQ|DD|DSN|FIN|APR|PRO|CON|CLO)-\d{3}|SRC-\d{3}|SG-\d{2})`")
+gate_ids_early = {g["gate_id"] for g in csv.DictReader(open(ROOT / "stage-gates.csv"))}
+xrefs = 0
+for aid, r in reg.items():
+    if r["status"] in REGISTER_ONLY:
+        continue
+    p_ = ROOT / r["file_path"]
+    if not (p_.is_file() and p_.suffix == ".md"):
+        continue
+    seen_bad = set()
+    for m in XREF.finditer(p_.read_text()):
+        ref = m.group(1)
+        xrefs += 1
+        known = ref in reg or ref in sources or ref in gate_ids_early
+        if not known and ref not in seen_bad:
+            seen_bad.add(ref)
+            bad("xref", f"{aid}: body references {ref}, which does not exist")
 
 # --------------------------------------------------------- 7. issue manifests
 MAN_REQ = ["artifact_id", "issue_id", "revision", "issue_purpose", "typst_source",
@@ -290,7 +366,8 @@ planned = sum(1 for r in reg.values() if r["status"] in REGISTER_ONLY)
 print(f"artifacts          {len(reg)}  ({len(reg)-planned} with files, {planned} planned)")
 print(f"markdown validated {md_checked}")
 print(f"stage gates        {len(gates)}")
-print(f"sources            {len(sources)}")
+print(f"sources            {len(sources)}  ({captures} archived captures verified)")
+print(f"cross-references   {xrefs} resolved")
 print(f"issue manifests    {len(manifests)}")
 print()
 for w in warn:
