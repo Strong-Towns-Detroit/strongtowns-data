@@ -31,6 +31,17 @@ Legacy provenance stays explicitly null. `verify` checks artifacts, schemas,
 counts, and parent chains recursively. Legacy import measures source rows or
 files before registration and fails on a baseline mismatch.
 
+Legacy artifacts may be imported from a sibling checkout without embedding its
+absolute path in the manifest:
+
+```bash
+uv run strongtowns-data legacy-import \
+  --source-root ../strongtowns-detroit detroit.bza.parking-requirements.raw
+```
+
+Registered paths must remain beneath the selected source root. Declared source
+hashes are checked before any snapshot is copied or promoted.
+
 Canonical tabular geography is GeoParquet. Raw PDFs, JSON, HTML, images, GTFS,
 and graphs retain their original formats and receive format-specific checks.
 

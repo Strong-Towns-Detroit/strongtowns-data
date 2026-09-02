@@ -181,6 +181,70 @@ def test_legacy_import_observes_directory_file_count(tmp_path):
     assert system.verify(["legacy"])[0]["state"] == "promoted"
 
 
+def test_legacy_import_accepts_portable_external_source_root(tmp_path):
+    repository = tmp_path / "repository"
+    source_root = tmp_path / "consumer"
+    repository.mkdir()
+    source_root.mkdir()
+    source = source_root / "legacy.csv"
+    source.write_text("id,value\na,1\n")
+    item = DataAsset(
+        "legacy", Path("data/datasets/legacy"), DatasetModel("legacy", "1.0.0"),
+        legacy_artifacts={"raw.csv": Path("legacy.csv")},
+        legacy_counts={"records": 1},
+        legacy_sha256={
+            "raw.csv": "fc1f81bcda1362179ddf12134c80e42440b19caf347851c8e9d6702fee8b71db"
+        },
+    )
+    system = DataBuildSystem(
+        repository,
+        (DataPipeline("legacy", (), (item,), acquisition_policy=AcquisitionPolicy.LOCAL),),
+    )
+
+    records = system.import_legacy(source_root=source_root)
+
+    manifest = json.loads((records[0]["path"] / "manifest.json").read_text())
+    assert manifest["source"]["source_label"] == "consumer"
+    assert manifest["source"]["legacy_paths"] == {"raw.csv": "legacy.csv"}
+    assert str(source_root) not in json.dumps(manifest)
+
+
+def test_legacy_import_rejects_hash_drift(tmp_path):
+    source_root = tmp_path / "consumer"
+    source_root.mkdir()
+    (source_root / "legacy.csv").write_text("id\na\n")
+    item = DataAsset(
+        "legacy", Path("data/datasets/legacy"), DatasetModel("legacy", "1.0.0"),
+        legacy_artifacts={"raw.csv": Path("legacy.csv")},
+        legacy_counts={"records": 1},
+        legacy_sha256={"raw.csv": "0" * 64},
+    )
+    system = DataBuildSystem(
+        tmp_path,
+        (DataPipeline("legacy", (), (item,), acquisition_policy=AcquisitionPolicy.LOCAL),),
+    )
+
+    with pytest.raises(ValueError, match="legacy hash mismatch"):
+        system.import_legacy(source_root=source_root)
+
+
+def test_legacy_import_rejects_source_root_escape(tmp_path):
+    source_root = tmp_path / "consumer"
+    source_root.mkdir()
+    item = DataAsset(
+        "legacy", Path("data/datasets/legacy"), DatasetModel("legacy", "1.0.0"),
+        legacy_artifacts={"raw.csv": Path("../outside.csv")},
+        legacy_counts={"records": 1},
+    )
+    system = DataBuildSystem(
+        tmp_path,
+        (DataPipeline("legacy", (), (item,), acquisition_policy=AcquisitionPolicy.LOCAL),),
+    )
+
+    with pytest.raises(ValueError):
+        system.import_legacy(source_root=source_root)
+
+
 def test_legacy_import_preflights_every_asset_before_promoting(tmp_path):
     (tmp_path / "one.csv").write_text("id\na\n")
     (tmp_path / "two.csv").write_text("id\na\n")

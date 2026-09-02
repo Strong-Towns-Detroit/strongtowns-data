@@ -27,6 +27,11 @@ from strongtowns_data.pipelines.traveltime import (
 )
 from strongtowns_data.pipelines.osm import collect_osm_pois, normalize_osm_features
 from strongtowns_data.pipelines.catalog import build_query_catalog
+from strongtowns_data.pipelines.presentation import (
+    build_residential_setback_classification,
+    preserve_parking_audit,
+    preserve_spirit_plaza,
+)
 from strongtowns_data.models.datasets import (
     ADDRESSES,
     ADDRESSES_RAW,
@@ -52,8 +57,14 @@ from strongtowns_data.models.datasets import (
     PARCELS_RAW,
     PARCEL_LAND_VALUES,
     PARCEL_ATTRIBUTES_RAW,
+    PARKING_REQUIREMENTS,
+    PARKING_REQUIREMENTS_RAW,
     QUERY_CATALOG,
     SPIRIT_TRAVELTIME_RAW,
+    SPIRIT_ACCESSIBILITY,
+    SPIRIT_PRESENTATION_RAW,
+    RESIDENTIAL_SETBACK_ENVELOPE,
+    SETBACK_RESULTS_RAW,
     STREETS,
     STREETS_RAW,
     TRAVELTIME_REQUESTS,
@@ -574,4 +585,86 @@ def spirit_plaza_traveltime_legacy_source() -> DataPipeline:
     return source_pipeline(
         "spirit-plaza-traveltime-legacy-source", (SPIRIT_TRAVELTIME_RAW,),
         AcquisitionPolicy.PAID, "Legacy immutable TravelTime response evidence.",
+    )
+
+
+@data_pipeline("spirit-plaza-presentation-legacy-source")
+def spirit_plaza_presentation_legacy_source() -> DataPipeline:
+    return source_pipeline(
+        "spirit-plaza-presentation-legacy-source", (SPIRIT_PRESENTATION_RAW,),
+        AcquisitionPolicy.PAID,
+        "Exact legacy presentation evidence derived from paid TravelTime and OSM sources.",
+    )
+
+
+@data_pipeline("detroit-bza-parking-requirements-legacy-source")
+def detroit_bza_parking_requirements_legacy_source() -> DataPipeline:
+    return source_pipeline(
+        "detroit-bza-parking-requirements-legacy-source", (PARKING_REQUIREMENTS_RAW,),
+        AcquisitionPolicy.PAID,
+        "Reviewed parking requirement transcription preserved from the BZA corpus.",
+    )
+
+
+@data_pipeline("detroit-residential-setback-results-legacy-source")
+def detroit_residential_setback_results_legacy_source() -> DataPipeline:
+    return source_pipeline(
+        "detroit-residential-setback-results-legacy-source", (SETBACK_RESULTS_RAW,),
+        AcquisitionPolicy.PUBLIC_NETWORK,
+        "Computed residential setback evidence preserved from the pre-split repository.",
+    )
+
+
+@data_pipeline("detroit-spirit-plaza-accessibility")
+def detroit_spirit_plaza_accessibility() -> DataPipeline:
+    def build(context):
+        return preserve_spirit_plaza(
+            context,
+            input_asset=SPIRIT_PRESENTATION_RAW.id,
+            output_asset=SPIRIT_ACCESSIBILITY.id,
+        )
+
+    return DataPipeline(
+        "detroit-spirit-plaza-accessibility",
+        (SPIRIT_PRESENTATION_RAW.id,),
+        (SPIRIT_ACCESSIBILITY,),
+        build=build,
+        description="Validated Spirit Plaza travel-time and road-context presentation data.",
+    )
+
+
+@data_pipeline("detroit-bza-parking-requirements")
+def detroit_bza_parking_requirements() -> DataPipeline:
+    def build(context):
+        return preserve_parking_audit(
+            context,
+            input_asset=PARKING_REQUIREMENTS_RAW.id,
+            output_asset=PARKING_REQUIREMENTS.id,
+        )
+
+    return DataPipeline(
+        "detroit-bza-parking-requirements",
+        (PARKING_REQUIREMENTS_RAW.id,),
+        (PARKING_REQUIREMENTS,),
+        build=build,
+        description="Validated, reviewed Detroit BZA parking requirement audit.",
+    )
+
+
+@data_pipeline("detroit-residential-setback-envelope")
+def detroit_residential_setback_envelope() -> DataPipeline:
+    def build(context):
+        return build_residential_setback_classification(
+            context,
+            parcels_asset=PARCELS.id,
+            results_asset=SETBACK_RESULTS_RAW.id,
+            output_asset=RESIDENTIAL_SETBACK_ENVELOPE.id,
+        )
+
+    return DataPipeline(
+        "detroit-residential-setback-envelope",
+        (PARCELS.id, SETBACK_RESULTS_RAW.id),
+        (RESIDENTIAL_SETBACK_ENVELOPE,),
+        build=build,
+        description="Parcel geometry joined to preserved residential setback results.",
     )

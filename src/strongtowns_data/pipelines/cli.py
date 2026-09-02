@@ -34,6 +34,10 @@ def parser() -> argparse.ArgumentParser:
     verify.add_argument("asset", nargs="*")
     legacy = commands.add_parser("legacy-import")
     legacy.add_argument("asset", nargs="*")
+    legacy.add_argument(
+        "--source-root",
+        help="root containing the registered legacy artifact paths",
+    )
     materialize = commands.add_parser("materialize")
     materialize.add_argument("--lock", required=True)
     materialize.add_argument("--output", required=True)
@@ -145,7 +149,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"verified {len(records)} promoted dataset(s)")
             return 0
         if args.command == "legacy-import":
-            for record in system.import_legacy(args.asset or None):
+            for record in system.import_legacy(
+                args.asset or None, source_root=args.source_root
+            ):
                 print(f"imported {record['asset']} -> {record['path']}")
             return 0
         if args.command == "materialize":

@@ -8,7 +8,7 @@ from typing import Any
 import csv
 import shutil
 
-from .snapshots import SnapshotStore, manifest_hash
+from .snapshots import SnapshotStore, manifest_hash, sha256
 from strongtowns_data.models import (
     AcquisitionPolicy,
     BuildMetadata,
@@ -220,8 +220,16 @@ class DataBuildSystem:
                 })
         return records
 
-    def import_legacy(self, selected: list[str] | None = None) -> list[dict[str, Any]]:
+    def import_legacy(
+        self,
+        selected: list[str] | None = None,
+        *,
+        source_root: Path | str | None = None,
+    ) -> list[dict[str, Any]]:
         """Register existing repository files without inventing provenance."""
+        import_root = Path(source_root).resolve() if source_root is not None else self.root
+        if not import_root.is_dir():
+            raise NotADirectoryError(import_root)
         requested = set(selected or self.assets)
         missing_ids = requested - set(self.assets)
         if missing_ids:
@@ -235,11 +243,22 @@ class DataBuildSystem:
                 continue
             sources = []
             for relative in asset.legacy_artifacts.values():
-                source = (self.root / relative).resolve()
-                source.relative_to(self.root)
+                source = (import_root / relative).resolve()
+                source.relative_to(import_root)
                 if not source.exists():
                     raise FileNotFoundError(source)
                 sources.append(source)
+            for (artifact_name, _), source in zip(asset.legacy_artifacts.items(), sources):
+                expected = asset.legacy_sha256.get(artifact_name)
+                if expected is not None:
+                    if not source.is_file():
+                        raise ValueError(f"legacy hash requires a file: {source}")
+                    observed = sha256(source)
+                    if observed != expected:
+                        raise ValueError(
+                            f"legacy hash mismatch for {asset.id}/{artifact_name}: "
+                            f"expected {expected}, observed {observed}"
+                        )
             observed_counts = _observed_legacy_counts(asset, sources)
             prepared[asset_id] = (asset, sources, observed_counts)
 
@@ -264,6 +283,7 @@ class DataBuildSystem:
                     "legacy_paths": {
                         name: str(path) for name, path in asset.legacy_artifacts.items()
                     },
+                    "source_label": import_root.name,
                 },
                 provenance_grade=ProvenanceGrade.LEGACY,
             )

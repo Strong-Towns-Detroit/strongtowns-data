@@ -43,6 +43,7 @@ def legacy_source_asset(
     *,
     tier: ArchiveTier,
     counts: dict[str, int],
+    sha256: dict[str, str] | None = None,
 ) -> DataAsset:
     return DataAsset(
         asset_id,
@@ -51,7 +52,52 @@ def legacy_source_asset(
         tier,
         legacy_artifacts={name: Path(path) for name, path in legacy.items()},
         legacy_counts=counts,
+        legacy_sha256=sha256 or {},
     )
+
+
+def validate_spirit_plaza_accessibility(directory: Path, _manifest) -> None:
+    import geopandas as gpd
+
+    isochrones = gpd.read_file(directory / "display_isochrones.geojson")
+    roads = gpd.read_file(directory / "road_context.geojson")
+    if len(isochrones) != 15:
+        raise ValueError("Spirit Plaza accessibility must contain 15 isochrones")
+    if set(isochrones["mode"]) != {"driving", "public_transport", "walking"}:
+        raise ValueError("Spirit Plaza accessibility has unexpected travel modes")
+    if set(isochrones["minutes"]) != {5, 10, 15, 20, 30}:
+        raise ValueError("Spirit Plaza accessibility has unexpected minute bands")
+    if set(roads["road_class"]) - {"arterial", "major", "local"}:
+        raise ValueError("Spirit Plaza road context has unexpected road classes")
+    for name, frame in (("isochrones", isochrones), ("roads", roads)):
+        if frame.crs is None or frame.crs.to_epsg() != 4326:
+            raise ValueError(f"Spirit Plaza {name} must use EPSG:4326")
+        if not frame.geometry.is_valid.all():
+            raise ValueError(f"Spirit Plaza {name} contains invalid geometry")
+
+
+def validate_parking_audit(directory: Path, _manifest) -> None:
+    import pandas as pd
+
+    frame = pd.read_csv(directory / "parking-case-audit.csv")
+    required = {
+        "case_history_id", "final_outcome", "required_spaces", "proposed_spaces",
+        "numeric_status", "shortfall_spaces", "shortfall_share",
+    }
+    missing = required - set(frame.columns)
+    if missing:
+        raise ValueError(f"parking audit is missing columns: {sorted(missing)}")
+    if len(frame) != 62 or frame["case_history_id"].duplicated().any():
+        raise ValueError("parking audit must contain 62 unique case histories")
+    explicit = frame[frame["numeric_status"].eq("explicit_pair")]
+    if len(explicit) != 35:
+        raise ValueError("parking audit must contain 35 explicit numeric pairs")
+    if (explicit["required_spaces"] <= 0).any():
+        raise ValueError("parking requirements must be positive")
+    if (explicit["proposed_spaces"] < 0).any():
+        raise ValueError("proposed parking cannot be negative")
+    if (explicit["proposed_spaces"] > explicit["required_spaces"]).any():
+        raise ValueError("proposed parking cannot exceed the relief requirement")
 
 
 PARCELS_RAW = DataAsset(
@@ -371,4 +417,104 @@ SPIRIT_TRAVELTIME_RAW = legacy_source_asset(
     "detroit.spirit-plaza.traveltime.raw", "detroit-spirit-plaza-traveltime",
     {"raw": "projects/detroit-land-use-forum/spirit-plaza-accessibility/output/raw"},
     tier=ArchiveTier.CRITICAL, counts={"files": 180},
+)
+SPIRIT_PRESENTATION_RAW = legacy_source_asset(
+    "detroit.spirit-plaza.presentation.raw", "detroit-spirit-plaza-presentation",
+    {
+        "display_isochrones.geojson": (
+            "projects/detroit-land-use-forum/spirit-plaza-accessibility/output/"
+            "display_isochrones.geojson"
+        ),
+        "road_context.geojson": (
+            "projects/detroit-land-use-forum/spirit-plaza-accessibility/output/"
+            "road_context.geojson"
+        ),
+    },
+    tier=ArchiveTier.CRITICAL,
+    counts={"files": 2},
+    sha256={
+        "display_isochrones.geojson": "decfcf57a51e98bc3d273fa888f5a5d07d0f61d79501c2128c05e94faa72165f",
+        "road_context.geojson": "a23718d25e52642b87e10436e3014c526917738693a473591b00d1d276ef2580",
+    },
+)
+PARKING_REQUIREMENTS_RAW = legacy_source_asset(
+    "detroit.bza.parking-requirements.raw", "detroit-bza-parking-requirements",
+    {
+        "parking-case-audit.csv": (
+            "projects/detroit-land-use-forum/parking-requirements/output/"
+            "parking-case-audit.csv"
+        )
+    },
+    tier=ArchiveTier.CRITICAL,
+    counts={"records": 62},
+    sha256={
+        "parking-case-audit.csv": "6905cf113e4f3db61b479a04827cc4871b26ef6998bb4817fede248abdb766e8"
+    },
+)
+SETBACK_RESULTS_RAW = legacy_source_asset(
+    "detroit.residential-setback-results.raw", "detroit-residential-setback-results",
+    {
+        "single-family-setback-results.csv": (
+            "projects/detroit-land-use-forum/parcel-geometry/output/"
+            "single-family-setback-results.csv"
+        ),
+        "two-family-setback-results.csv": (
+            "projects/detroit-land-use-forum/parcel-geometry/output/"
+            "two-family-setback-results.csv"
+        ),
+        "principal_building_site_audit.csv": (
+            "projects/detroit-land-use-forum/base-units-geometry/output/"
+            "principal_building_site_audit.csv"
+        ),
+    },
+    tier=ArchiveTier.CRITICAL,
+    counts={"files": 3},
+    sha256={
+        "single-family-setback-results.csv": "ef97860b8c31b6b137676609620bbc1b39c03ce0b51c46163249d7da3c75df7a",
+        "two-family-setback-results.csv": "980ab61edcb245a2813c0acb438f82689f414d43716cd0910bc1561d638085ac",
+        "principal_building_site_audit.csv": "aed2e770f67af14582b8227ac92fd3bdac3eb6df67483df58e4ed6f4b03d78e7",
+    },
+)
+
+SPIRIT_ACCESSIBILITY = DataAsset(
+    "detroit.spirit-plaza.accessibility",
+    Path("data/datasets/detroit-spirit-plaza-accessibility"),
+    DatasetModel(
+        "detroit.spirit-plaza.accessibility", "1.0.0",
+        custom_validator=validate_spirit_plaza_accessibility,
+    ),
+    ArchiveTier.DELIVERABLE,
+)
+PARKING_REQUIREMENTS = DataAsset(
+    "detroit.bza.parking-requirements",
+    Path("data/datasets/detroit-bza-parking-requirements"),
+    DatasetModel(
+        "detroit.bza.parking-requirements", "1.0.0",
+        custom_validator=validate_parking_audit,
+    ),
+    ArchiveTier.DELIVERABLE,
+)
+RESIDENTIAL_SETBACK_ENVELOPE = DataAsset(
+    "detroit.residential-setback-envelope",
+    Path("data/datasets/detroit-residential-setback-envelope"),
+    DatasetModel(
+        "detroit.residential-setback-envelope", "1.0.0",
+        required_columns={
+            "source_row": "int64",
+            "parcel_id": "string",
+            "parcel_key": "string",
+            "building_type": "string",
+            "in_scope": "bool",
+            "candidate_multi_parcel_site": "bool",
+            "evaluated": "bool",
+            "crosses_envelope": "bool",
+            "evaluation_reason": "string",
+            "frontage_confidence": "string",
+        },
+        primary_key=("parcel_id",),
+        geometry_types=("Polygon", "MultiPolygon"),
+        crs="EPSG:4326",
+        accepted_artifact="classification.parquet",
+    ),
+    ArchiveTier.DELIVERABLE,
 )

@@ -29,6 +29,14 @@ def test_repository_registry_has_one_producer_for_every_asset():
     output_count = sum(len(pipeline.outputs) for pipeline in system.pipelines or ())
     assert len(system.assets) == output_count
     assert len(system.producers) == output_count
+    assert {
+        "detroit.spirit-plaza.presentation.raw",
+        "detroit.spirit-plaza.accessibility",
+        "detroit.bza.parking-requirements.raw",
+        "detroit.bza.parking-requirements",
+        "detroit.residential-setback-results.raw",
+        "detroit.residential-setback-envelope",
+    } <= set(system.assets)
 
 
 def test_repository_datasets_share_one_external_directory():
@@ -43,7 +51,9 @@ def test_repository_paid_pipelines_remain_explicit_acquisition_only():
         if pipeline.acquisition_policy is AcquisitionPolicy.PAID
     ]
     assert {pipeline.name for pipeline in paid} == {
+        "detroit-bza-parking-requirements-legacy-source",
         "detroit-bza-gemini-source",
+        "spirit-plaza-presentation-legacy-source",
         "spirit-plaza-traveltime-legacy-source",
         "traveltime-smoke-results",
     }

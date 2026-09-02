@@ -84,6 +84,7 @@ class DataAsset:
     archive_tier: ArchiveTier = ArchiveTier.NONE
     legacy_artifacts: Mapping[str, Path] = field(default_factory=dict)
     legacy_counts: Mapping[str, int] = field(default_factory=dict)
+    legacy_sha256: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

@@ -97,6 +97,15 @@ def test_lock_update_parser_is_dry_run_by_default():
     assert args.asset == ["detroit.parcels"]
 
 
+def test_legacy_import_parser_accepts_external_source_root():
+    args = parser().parse_args([
+        "legacy-import", "--source-root", "../consumer", "legacy.asset",
+    ])
+
+    assert args.source_root == "../consumer"
+    assert args.asset == ["legacy.asset"]
+
+
 def test_data_lock_updates_only_requested_promoted_assets(monkeypatch, tmp_path):
     manifest = {"snapshot_id": "new-snapshot", "artifacts": []}
 
