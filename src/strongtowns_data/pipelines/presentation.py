@@ -119,8 +119,8 @@ def build_residential_setback_classification(
         ignore_index=True,
     ).drop_duplicates("parcel_key", keep="last")
     frame = parcels.merge(results, on="parcel_key", how="left", validate="one_to_one")
-    frame["evaluated"] = frame["evaluated"].fillna(False).astype(bool)
-    frame["crosses_envelope"] = frame["crosses_envelope"].fillna(False).astype(bool)
+    frame["evaluated"] = frame["evaluated"].eq(True)
+    frame["crosses_envelope"] = frame["crosses_envelope"].eq(True)
     frame.loc[
         frame["in_scope"] & frame["candidate_multi_parcel_site"], "evaluation_reason"
     ] = "possible_multi_parcel_site"
