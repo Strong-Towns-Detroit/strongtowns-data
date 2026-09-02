@@ -5,11 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 from collections.abc import Sequence
+from pathlib import Path
+
 from dotenv import load_dotenv
 
-from .engine import DataBuildSystem
-from .archive import DataArchive
 from strongtowns_data.repository import DataLock, DataRepository
+
+from .archive import DataArchive
+from .engine import DataBuildSystem
 
 
 def parser() -> argparse.ArgumentParser:
@@ -35,6 +38,17 @@ def parser() -> argparse.ArgumentParser:
     materialize.add_argument("--lock", required=True)
     materialize.add_argument("--output", required=True)
     materialize.add_argument(
+        "--repository",
+        default=".",
+        help="data repository containing strongtowns-data.toml (default: current directory)",
+    )
+    lock = commands.add_parser("lock")
+    lock_commands = lock.add_subparsers(dest="lock_command", required=True)
+    lock_update = lock_commands.add_parser("update")
+    lock_update.add_argument("asset", nargs="+")
+    lock_update.add_argument("--lock", required=True)
+    lock_update.add_argument("--apply", action="store_true")
+    lock_update.add_argument(
         "--repository",
         default=".",
         help="data repository containing strongtowns-data.toml (default: current directory)",
@@ -70,7 +84,7 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
-        start = args.repository if args.command == "materialize" else "."
+        start = args.repository if args.command in {"materialize", "lock"} else "."
         system = DataBuildSystem.find(start)
         load_dotenv(system.root / ".env")
         if args.command == "list":
@@ -138,6 +152,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             lock = DataLock.load(args.lock)
             for path in DataRepository(system).materialize(lock, args.output):
                 print(f"materialized {path}")
+            return 0
+        if args.command == "lock":
+            lock_path = Path(args.lock)
+            current = DataLock.load(lock_path) if lock_path.is_file() else DataLock(())
+            updated = current.update_promoted(system, args.asset)
+            previous = {item.dataset_id: item for item in current.assets}
+            requested = set(args.asset)
+            for reference in updated.assets:
+                if reference.dataset_id not in requested:
+                    continue
+                action = "pinned" if args.apply else "would pin"
+                if previous.get(reference.dataset_id) == reference:
+                    action = "already pinned"
+                print(f"{action} {reference.dataset_id} {reference.snapshot_id}")
+            if args.apply:
+                updated.write(lock_path)
             return 0
         if args.command == "archive":
             archive = DataArchive(system.root, tuple(system.assets.values()))

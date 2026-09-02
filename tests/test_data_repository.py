@@ -54,3 +54,71 @@ def test_materialize_accepts_explicit_repository():
     ])
 
     assert args.repository == "../data"
+
+
+def test_data_lock_finds_assets_and_writes_deterministically(tmp_path):
+    lock = DataLock((
+        DataAssetRef("z", "snapshot-z", "b" * 64),
+        DataAssetRef("a", "snapshot-a", "a" * 64),
+    ))
+    path = tmp_path / "data.lock.json"
+    lock.write(path)
+
+    assert DataLock.load(path).asset("a").snapshot_id == "snapshot-a"
+    assert [item["dataset_id"] for item in json.loads(path.read_text())["assets"]] == ["a", "z"]
+    with pytest.raises(KeyError, match="not pinned"):
+        lock.asset("missing")
+
+
+def test_repository_resolves_only_declared_artifacts(tmp_path, monkeypatch):
+    reference = DataAssetRef("detroit.parcels", "snapshot", "a" * 64)
+    artifact = tmp_path / "parcels.gpkg"
+    artifact.write_text("data")
+    repository = DataRepository(object())
+    monkeypatch.setattr(
+        DataRepository,
+        "resolve",
+        lambda self, item: (tmp_path, {"artifacts": [{"path": "parcels.gpkg"}]}),
+    )
+
+    assert repository.artifact(reference, "parcels.gpkg") == artifact.resolve()
+    with pytest.raises(ValueError, match="not declared"):
+        repository.artifact(reference, "other.gpkg")
+
+
+def test_lock_update_parser_is_dry_run_by_default():
+    args = parser().parse_args([
+        "lock", "update", "--repository", "../data", "--lock", "data.lock.json",
+        "detroit.parcels",
+    ])
+
+    assert args.repository == "../data"
+    assert args.apply is False
+    assert args.asset == ["detroit.parcels"]
+
+
+def test_data_lock_updates_only_requested_promoted_assets(monkeypatch, tmp_path):
+    manifest = {"snapshot_id": "new-snapshot", "artifacts": []}
+
+    class Store:
+        def __init__(self, root):
+            pass
+
+        def promoted(self, asset):
+            return tmp_path, manifest
+
+    monkeypatch.setattr("strongtowns_data.repository.SnapshotStore", Store)
+    system = type(
+        "System",
+        (),
+        {"root": tmp_path, "assets": {"a": object(), "b": object()}},
+    )()
+    original = DataLock((DataAssetRef("b", "old-b", "b" * 64),))
+
+    updated = original.update_promoted(system, ["a"])
+
+    assert [item.dataset_id for item in updated.assets] == ["a", "b"]
+    assert updated.asset("a").snapshot_id == "new-snapshot"
+    assert updated.asset("b") == original.asset("b")
+    with pytest.raises(ValueError, match="unknown datasets"):
+        original.update_promoted(system, ["missing"])

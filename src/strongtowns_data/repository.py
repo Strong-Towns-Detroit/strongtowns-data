@@ -12,12 +12,60 @@ from uuid import uuid4
 
 from strongtowns_data.models import ArtifactDescriptor, DataAssetRef
 from strongtowns_data.pipelines.engine import DataBuildSystem
-from strongtowns_data.pipelines.snapshots import SnapshotStore, sha256
+from strongtowns_data.pipelines.snapshots import SnapshotStore, manifest_hash, sha256
 
 
 @dataclass(frozen=True)
 class DataLock:
     assets: tuple[DataAssetRef, ...]
+
+    def asset(self, dataset_id: str) -> DataAssetRef:
+        """Return one pinned dataset reference by its stable ID."""
+        matches = [item for item in self.assets if item.dataset_id == dataset_id]
+        if not matches:
+            raise KeyError(f"dataset is not pinned: {dataset_id}")
+        return matches[0]
+
+    def to_dict(self) -> dict:
+        return {
+            "lock_version": "1.0.0",
+            "assets": [
+                {
+                    "dataset_id": item.dataset_id,
+                    "snapshot_id": item.snapshot_id,
+                    "manifest_sha256": item.manifest_sha256,
+                }
+                for item in sorted(self.assets, key=lambda value: value.dataset_id)
+            ],
+        }
+
+    def write(self, path: Path | str) -> None:
+        """Atomically write the lock in its canonical, deterministic form."""
+        target = Path(path).resolve()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.{uuid4()}.tmp")
+        temporary.write_text(json.dumps(self.to_dict(), indent=2) + "\n", encoding="utf-8")
+        os.replace(temporary, target)
+
+    def update_promoted(
+        self,
+        system: DataBuildSystem,
+        dataset_ids: list[str],
+    ) -> DataLock:
+        """Return a lock with selected IDs replaced by promoted snapshots."""
+        unknown = set(dataset_ids) - set(system.assets)
+        if unknown:
+            raise ValueError(f"unknown datasets: {sorted(unknown)}")
+        updated = {item.dataset_id: item for item in self.assets}
+        store = SnapshotStore(system.root)
+        for dataset_id in dataset_ids:
+            _, manifest = store.promoted(system.assets[dataset_id])
+            updated[dataset_id] = DataAssetRef(
+                dataset_id=dataset_id,
+                snapshot_id=manifest["snapshot_id"],
+                manifest_sha256=manifest_hash(manifest),
+            )
+        return DataLock(tuple(updated[key] for key in sorted(updated)))
 
     @classmethod
     def load(cls, path: Path | str) -> DataLock:
@@ -68,6 +116,18 @@ class DataRepository:
             ArtifactDescriptor(item["path"], item["size"], item["sha256"])
             for item in manifest["artifacts"]
         )
+
+    def artifact(self, reference: DataAssetRef, path: str) -> Path:
+        """Resolve one declared artifact from a validated pinned snapshot."""
+        directory, manifest = self.resolve(reference)
+        records = {item["path"]: item for item in manifest["artifacts"]}
+        if path not in records:
+            raise ValueError(
+                f"artifact is not declared by {reference.dataset_id}: {path}"
+            )
+        resolved = (directory / path).resolve()
+        resolved.relative_to(directory.resolve())
+        return resolved
 
     def materialize(self, lock: DataLock, destination: Path | str) -> tuple[Path, ...]:
         root = Path(destination).resolve()

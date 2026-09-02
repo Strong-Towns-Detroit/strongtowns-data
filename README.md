@@ -20,6 +20,28 @@ Consumer lock files identify snapshots by dataset ID, snapshot ID, and manifest
 SHA-256. Materialization only copies already-present validated snapshots; it
 never builds or fetches them.
 
+Resolve one verified artifact through the public repository API:
+
+```python
+lock = DataLock.load("strongtowns-data.lock.json")
+repository = DataRepository(DataBuildSystem.find("../strongtowns-data"))
+parcels = repository.artifact(lock.asset("detroit.parcels"), "accepted.parquet")
+```
+
+Update selected lock entries from separately prepared promoted snapshots. The
+command previews by default and writes only with `--apply`:
+
+```bash
+strongtowns-data lock update \
+  --repository . \
+  --lock ../strongtowns-detroit/strongtowns-data.lock.json \
+  detroit.parcels
+strongtowns-data lock update --apply \
+  --repository . \
+  --lock ../strongtowns-detroit/strongtowns-data.lock.json \
+  detroit.parcels
+```
+
 Only code, schemas, reviewed fixtures, and provenance metadata belong in Git.
 Raw downloads and generated dataset payloads remain in the external archive.
 See [DATA_LICENSING.md](DATA_LICENSING.md).
