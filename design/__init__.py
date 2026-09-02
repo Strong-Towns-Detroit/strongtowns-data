@@ -1,1 +1,0 @@
-"""Generated design tokens."""

@@ -1,0 +1,35 @@
+name: Python
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - run: >-
+          uv run ruff check
+          src/strongtowns_data/repository.py
+          src/strongtowns_data/base_units
+          src/strongtowns_data/pois
+          src/strongtowns_data/traveltime
+          src/strongtowns_data/pipelines/snapshots.py
+          tests/test_data_repository.py
+          tests/test_data_models.py
+          tests/test_krabby_*.py
+      - run: uv run pytest -q tests/test_data_*.py tests/test_land_values.py tests/test_krabby_*.py
+      - run: uv build
+      - name: Smoke-test the built wheel
+        run: |
+          python -m venv /tmp/strongtowns-data-wheel
+          /tmp/strongtowns-data-wheel/bin/pip install --no-deps dist/*.whl
+          /tmp/strongtowns-data-wheel/bin/strongtowns-data --help

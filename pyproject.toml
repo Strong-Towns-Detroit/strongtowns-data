@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "strongtowns-data"
+version = "0.1.0"
+description = "Reproducible civic data pipelines and parcel feature engineering"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4",
+    "duckdb>=1.4,<2",
+    "geopandas",
+    "httpx",
+    "jsonschema",
+    "lxml",
+    "matplotlib",
+    "networkx",
+    "numpy",
+    "osmnx",
+    "pandas",
+    "polars",
+    "pyarrow",
+    "pyogrio",
+    "python-docx",
+    "python-dotenv",
+    "rdflib",
+    "requests",
+    "scikit-learn",
+    "shapely",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-mock", "ruff"]
+archive = ["boto3"]
+census = ["pytidycensus"]
+semantic = ["sentence-transformers"]
+accessibility = ["r5py"]
+notebooks = ["marimo>=0.18,<1"]
+
+[project.scripts]
+strongtowns-data = "strongtowns_data.pipelines.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [
+    "src",
+    "pipelines/parcel-data",
+    "pipelines/housingDataAnalysis/src",
+    "pipelines/housingDataAnalysis/street_simplification",
+    "pipelines/zoning",
+    "pipelines/isochrones",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
