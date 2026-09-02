@@ -260,6 +260,8 @@ class SnapshotStore:
         snapshot_id: str,
         metadata: BuildMetadata,
         parents: list[dict[str, Any]],
+        *,
+        producer: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         manifest = {
             "manifest_version": "1.0.0",
@@ -268,7 +270,7 @@ class SnapshotStore:
             "schema_hash": asset.model.schema_hash,
             "snapshot_id": snapshot_id,
             "created_at": datetime.now(UTC).isoformat(),
-            "producer": producer_state(self.root),
+            "producer": dict(producer) if producer is not None else producer_state(self.root),
             "parents": parents,
             "artifacts": artifact_records(staging),
             "counts": dict(metadata.counts),

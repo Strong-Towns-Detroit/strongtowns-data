@@ -8,7 +8,7 @@ from typing import Any
 import csv
 import shutil
 
-from .snapshots import SnapshotStore, manifest_hash, sha256
+from .snapshots import SnapshotStore, manifest_hash, producer_state, sha256
 from strongtowns_data.models import (
     AcquisitionPolicy,
     BuildMetadata,
@@ -298,6 +298,7 @@ class DataBuildSystem:
 
     def build(self, selected: list[str] | None = None, *, promote: bool = True) -> list[dict[str, Any]]:
         store = SnapshotStore(self.root)
+        build_producer = producer_state(self.root)
         records = []
         assets = self.assets
         ordered = self.ordered(selected)
@@ -357,7 +358,12 @@ class DataBuildSystem:
             completed = []
             for asset in pipeline.outputs:
                 manifest = store.write_manifest(
-                    asset, staging[asset.id], ids[asset.id], metadata[asset.id], parents
+                    asset,
+                    staging[asset.id],
+                    ids[asset.id],
+                    metadata[asset.id],
+                    parents,
+                    producer=build_producer,
                 )
                 completed.append((asset, manifest))
             if promote and any(manifest["producer"]["dirty"] for _, manifest in completed):

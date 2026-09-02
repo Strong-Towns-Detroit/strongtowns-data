@@ -324,6 +324,25 @@ def test_snapshot_hash_validation_detects_corruption(tmp_path, monkeypatch):
         validate_snapshot(item, staging, manifest)
 
 
+def test_manifest_accepts_transaction_producer_state(tmp_path):
+    item = asset("rows", "data/datasets/rows")
+    store = SnapshotStore(tmp_path)
+    snapshot_id, staging = store.create_staging(item)
+    context = PipelineContext(tmp_path, "rows", {}, {}, {"rows": staging})
+    metadata = write_rows(context, "rows")["rows"]
+
+    manifest = store.write_manifest(
+        item,
+        staging,
+        snapshot_id,
+        metadata,
+        [],
+        producer={"git_commit": "abc123", "dirty": False},
+    )
+
+    assert manifest["producer"] == {"git_commit": "abc123", "dirty": False}
+
+
 def test_dirty_snapshot_cannot_promote(tmp_path, monkeypatch):
     item = asset("rows", "data/datasets/rows")
     store = SnapshotStore(tmp_path)
