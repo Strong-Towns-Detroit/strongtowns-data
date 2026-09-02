@@ -33,9 +33,8 @@ jobs:
       - run: uv build
       - name: Smoke-test the built wheel
         run: |
-          python -m venv /tmp/strongtowns-data-wheel
-          /tmp/strongtowns-data-wheel/bin/pip install --no-deps dist/*.whl
-          /tmp/strongtowns-data-wheel/bin/strongtowns-data --help
+          uv pip install --python .venv/bin/python --force-reinstall dist/*.whl
+          .venv/bin/strongtowns-data --help
 
   archive-restore-smoke:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
