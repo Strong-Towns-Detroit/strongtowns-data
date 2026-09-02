@@ -8,7 +8,8 @@ from typing import Any
 import csv
 import shutil
 
-from .snapshots import SnapshotStore, manifest_hash, producer_state, sha256
+from . import snapshots
+from .snapshots import SnapshotStore, manifest_hash, sha256
 from strongtowns_data.models import (
     AcquisitionPolicy,
     BuildMetadata,
@@ -298,7 +299,7 @@ class DataBuildSystem:
 
     def build(self, selected: list[str] | None = None, *, promote: bool = True) -> list[dict[str, Any]]:
         store = SnapshotStore(self.root)
-        build_producer = producer_state(self.root)
+        build_producer = snapshots.producer_state(self.root)
         records = []
         assets = self.assets
         ordered = self.ordered(selected)
