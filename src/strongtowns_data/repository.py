@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from strongtowns_data.models import ArtifactDescriptor, DataAssetRef
 from strongtowns_data.pipelines.engine import DataBuildSystem
-from strongtowns_data.pipelines.snapshots import SnapshotStore, manifest_hash, sha256
+from strongtowns_data.pipelines.snapshots import SnapshotStore, manifest_hash, sha256, validate_snapshot
 
 
 @dataclass(frozen=True)
@@ -139,14 +139,19 @@ class DataRepository:
             if target.exists():
                 if sha256(target / "manifest.json") != reference.manifest_sha256:
                     raise ValueError(f"existing materialization differs: {target}")
+                validate_snapshot(self.system.assets[reference.dataset_id], target)
                 written.append(target)
                 continue
             staging = target.parent / f".staging-{uuid4()}"
             staging.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(source, staging)
-            if sha256(staging / "manifest.json") != reference.manifest_sha256:
-                shutil.rmtree(staging)
-                raise ValueError(f"copied manifest hash mismatch for {reference.dataset_id}")
-            os.replace(staging, target)
+            try:
+                shutil.copytree(source, staging)
+                if sha256(staging / "manifest.json") != reference.manifest_sha256:
+                    raise ValueError(f"copied manifest hash mismatch for {reference.dataset_id}")
+                validate_snapshot(self.system.assets[reference.dataset_id], staging)
+                os.replace(staging, target)
+            finally:
+                if staging.exists():
+                    shutil.rmtree(staging)
             written.append(target)
         return tuple(written)

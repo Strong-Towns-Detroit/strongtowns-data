@@ -131,3 +131,61 @@ def test_data_lock_updates_only_requested_promoted_assets(monkeypatch, tmp_path)
     assert updated.asset("b") == original.asset("b")
     with pytest.raises(ValueError, match="unknown datasets"):
         original.update_promoted(system, ["missing"])
+
+
+@pytest.fixture
+def materialization(tmp_path):
+    from types import SimpleNamespace
+    from strongtowns_data.models import DataAsset, DatasetModel, BuildMetadata
+    from strongtowns_data.pipelines.snapshots import SnapshotStore, sha256
+    item = DataAsset("example", Path("data/example"), DatasetModel("example", "1.0.0"))
+    store = SnapshotStore(tmp_path)
+    snapshot_id, staging = store.create_staging(item)
+    (staging / "payload.txt").write_text("original")
+    store.write_manifest(item, staging, snapshot_id, BuildMetadata(), [], producer={
+        "name": "test", "git_commit": "fixture", "dirty": False,
+    })
+    source = store.promote(item, staging)
+    reference = DataAssetRef(item.id, snapshot_id, sha256(source / "manifest.json"))
+    repository = DataRepository(SimpleNamespace(root=tmp_path, assets={item.id: item}))
+    return repository, DataLock((reference,)), tmp_path / "output"
+
+
+def test_materialization_validates_repeated_copy(materialization):
+    repository, lock, output = materialization
+    first = repository.materialize(lock, output)
+    assert repository.materialize(lock, output) == first
+    assert (first[0] / "payload.txt").read_text() == "original"
+
+
+@pytest.mark.parametrize("damage", ["corrupt", "missing"])
+def test_materialization_rejects_damaged_destination(materialization, damage):
+    repository, lock, output = materialization
+    target, = repository.materialize(lock, output)
+    payload = target / "payload.txt"
+    if damage == "corrupt":
+        payload.write_text("tampered")  # Same size, different hash.
+    else:
+        payload.unlink()
+    with pytest.raises(ValueError, match="artifact"):
+        repository.materialize(lock, output)
+    assert payload.read_text() == "tampered" if payload.exists() else damage == "missing"
+
+
+@pytest.mark.parametrize("failure", ["interrupt", "corrupt"])
+def test_materialization_cleans_failed_staging(materialization, monkeypatch, failure):
+    import shutil
+    repository, lock, output = materialization
+    copytree = shutil.copytree
+
+    def damaged_copy(source, destination):
+        copytree(source, destination)
+        if failure == "interrupt":
+            raise OSError("interrupted copy")
+        (destination / "payload.txt").write_text("tampered")
+
+    monkeypatch.setattr("strongtowns_data.repository.shutil.copytree", damaged_copy)
+    with pytest.raises((OSError, ValueError)):
+        repository.materialize(lock, output)
+    assert not list(output.rglob(".staging-*"))
+    assert not (output / lock.assets[0].dataset_id / lock.assets[0].snapshot_id).exists()
