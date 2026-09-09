@@ -4,10 +4,11 @@ Reproducible acquisition, cleaning, canonical datasets, routing and
 accessibility features, and parcel-level modeling for civic research.
 
 Use the unified CLI for read-only status checks and materializing a consumer's
-pinned snapshots:
+pinned snapshots. With Python 3.12+ and Git installed, one command installs
+the CLI and both the data and graphics SDKs:
 
 ```bash
-pip install 'strongtowns-cli[data] @ git+https://github.com/Strong-Towns-Detroit/strongtowns-cli.git@main'
+python -m pip install 'strongtowns-cli @ git+https://github.com/Strong-Towns-Detroit/strongtowns-cli.git@main'
 strongtowns doctor --require data
 strongtowns data status --repository .
 strongtowns data materialize ../strongtowns-detroit/strongtowns-data.lock.json \
