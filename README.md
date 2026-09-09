@@ -3,6 +3,20 @@
 Reproducible acquisition, cleaning, canonical datasets, routing and
 accessibility features, and parcel-level modeling for civic research.
 
+Use the unified CLI for read-only status checks and materializing a consumer's
+pinned snapshots:
+
+```bash
+pip install 'strongtowns-cli[data] @ git+https://github.com/Strong-Towns-Detroit/strongtowns-cli.git@main'
+strongtowns doctor --require data
+strongtowns data status --repository .
+strongtowns data materialize ../strongtowns-detroit/strongtowns-data.lock.json \
+  ../strongtowns-detroit/.data --repository .
+```
+
+The unified CLI deliberately does not fetch, build, promote, or change locks.
+Use this package's domain CLI for those data-producing operations:
+
 ```bash
 strongtowns-data status
 strongtowns-data build
@@ -23,10 +37,15 @@ never builds or fetches them.
 Resolve one verified artifact through the public repository API:
 
 ```python
+from strongtowns_data import DataBuildSystem, DataLock, DataRepository
+
 lock = DataLock.load("strongtowns-data.lock.json")
 repository = DataRepository(DataBuildSystem.find("../strongtowns-data"))
 parcels = repository.artifact(lock.asset("detroit.parcels"), "accepted.parquet")
 ```
+
+See the [generated Data SDK reference](docs/API.md) for the complete public
+Python interface and instructions for building the docstring-derived HTML docs.
 
 Update selected lock entries from separately prepared promoted snapshots. The
 command previews by default and writes only with `--apply`:

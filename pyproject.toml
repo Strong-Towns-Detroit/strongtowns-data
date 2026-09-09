@@ -33,6 +33,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-mock", "ruff"]
+docs = ["pdoc>=15,<16"]
 archive = ["boto3"]
 census = ["pytidycensus"]
 semantic = ["sentence-transformers"]

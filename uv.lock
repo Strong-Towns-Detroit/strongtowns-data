@@ -1740,6 +1740,20 @@ wheels = [
 ]
 
 [[package]]
+name = "pdoc"
+version = "15.0.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jinja2" },
+    { name = "markupsafe" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/91/5c/e94c1ab4aa2f8a9cc29d81e1c513c6216946cb3a90957ef7115b12e9363d/pdoc-15.0.4.tar.gz", hash = "sha256:cf9680f10f5b4863381f44ef084b1903f8f356acb0d4cc6b64576ba9fb712c82", size = 155678, upload-time = "2025-06-04T17:05:49.639Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fd/2c/87250ac73ca8730b2c4e0185b573585f0b42e09562132e6c29d00b3a9bb9/pdoc-15.0.4-py3-none-any.whl", hash = "sha256:f9028e85e7bb8475b054e69bde1f6d26fc4693d25d9fa1b1ce9009bec7f7a5c4", size = 145978, upload-time = "2025-06-04T17:05:48.473Z" },
+]
+
+[[package]]
 name = "pillow"
 version = "12.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2974,7 +2988,7 @@ wheels = [
 
 [[package]]
 name = "strongtowns-data"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -3014,6 +3028,9 @@ dev = [
     { name = "pytest-mock" },
     { name = "ruff" },
 ]
+docs = [
+    { name = "pdoc" },
+]
 notebooks = [
     { name = "marimo" },
 ]
@@ -3036,6 +3053,7 @@ requires-dist = [
     { name = "numpy" },
     { name = "osmnx" },
     { name = "pandas" },
+    { name = "pdoc", marker = "extra == 'docs'", specifier = ">=15,<16" },
     { name = "polars" },
     { name = "pyarrow" },
     { name = "pyogrio" },
@@ -3052,7 +3070,7 @@ requires-dist = [
     { name = "sentence-transformers", marker = "extra == 'semantic'" },
     { name = "shapely" },
 ]
-provides-extras = ["dev", "archive", "census", "semantic", "accessibility", "notebooks"]
+provides-extras = ["dev", "docs", "archive", "census", "semantic", "accessibility", "notebooks"]
 
 [[package]]
 name = "sympy"

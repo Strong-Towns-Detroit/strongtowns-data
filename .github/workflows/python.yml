@@ -36,6 +36,18 @@ jobs:
           uv pip install --python .venv/bin/python --force-reinstall dist/*.whl
           .venv/bin/strongtowns-data --help
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --extra docs
+      - run: uv run pdoc --output-directory build/docs strongtowns_data
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strongtowns-data-sdk-docs
+          path: build/docs
+
   archive-restore-smoke:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
