@@ -1,110 +1,71 @@
-# Next simplification: OpenStreetMap
+# OSM simplification — implementation complete
 
-## Decision
+Implemented September 15, 2026. See [OSM usage and maintenance](osm.md) for commands,
+schemas, compatibility, and source provenance.
 
-Consolidate OSM acquisition and POI normalization next. Start with POIs, then
-move boundary, street, and water acquisition onto the same source-evidence
-conventions. Keep the existing fetch/build distinction: fetching is explicit;
-opening or rebuilding prepared data is offline.
+## Delivered
 
-## What exists today
+- One shared source normalizer and explicit OSMnx acquisition module in
+  `strongtowns_data.osm`, with schema-1 adapters for existing POI callers.
+- Separate schema-2 POI source and routing-point datasets. Sources retain all
+  returned tags and original geometry; rejected rows retain identities, reasons,
+  tags, and geometry evidence. Shop-first and amenity-first legacy category
+  interpretations remain distinct.
+- Query fingerprints include boundary geometry, endpoint, tags, OSMnx version,
+  and relevant settings. Snapshots retain boundary and cached response evidence,
+  collection intervals, and attribution. Settings restore after success/failure;
+  partial Overpass responses fail acquisition.
+- Explicit Detroit and HD-9 boundary, water, and street source pipelines. Water
+  and streets reuse pinned boundary geometry. Street GeoParquet preserves node
+  IDs, directed multiedge keys, curved geometry, and list-valued attributes.
+- Legislative, housing-map, and isochrone acquisition callers delegate to the
+  shared module. Routing algorithms, network parameters, and map query filters
+  are preserved. Arterial display filtering handles all highway tags.
+- Detroit's legislative export reads verified lock references without fetching.
+  The SDK dependency and three HD-9 dataset references are pinned in the consumer.
+- Shared OSM tests run in CI. Existing import-formatting failures are corrected.
 
-| Location | Responsibility | Problem to resolve |
-| --- | --- | --- |
-| `src/strongtowns_data/pipelines/osm.py` | Registered POI fetch, raw geometry, routing points, rejection records | Keeps five category tags; loses names, addresses, and other source tags. |
-| `src/strongtowns_data/pois/osm.py` | Public collector and a second normalizer | Includes `craft`, names, and display tags, but silently skips missing geometry and uses a different identity/column contract. |
-| `src/strongtowns_data/legislative/osm.py` | Place boundaries, drive streets, water, GPKG output | Fetches directly; drops graph edge identities and flattens highway tags for display. |
-| `src/strongtowns_data/geo/isochrones.py` | Routing network and water acquisition | Another acquisition path mixed with analysis. |
-| `pipelines/housingDataAnalysis/` | Historical map rendering and street simplification | Direct OSMnx calls and independent output conventions. |
+## Validated data
 
-The registered basemap source currently imports existing boundary/water evidence;
-it does not share an acquisition implementation with the legislative fetchers.
-The POI raw and canonical datasets were missing or invalid at the September 15
-status check, while the imported basemap was promoted. Preserve that basemap.
+| Dataset | Result |
+| --- | --- |
+| Detroit POI source, schema 2 | 15,226 features; 0 rejected |
+| Detroit routing points, schema 2 | 15,226 points; built offline |
+| Detroit boundary | 1 municipality |
+| HD-9 boundaries | 4 municipalities |
+| Detroit water source | 170 features; 0 rejected |
+| HD-9 water source | 174 features; 0 rejected |
+| HD-9 street source | 21,483 nodes; 61,833 directed edges |
 
-The two POI implementations also choose a primary category in different orders
-(`amenity` first versus `shop` first). Consolidation must not silently reclassify
-existing consumers. Empty/all-rejected input handling needs explicit coverage;
-the registered implementation currently accesses `result.source_id` even when
-no output columns were constructed.
+All listed sources validated and promoted from clean code; their manifests and
+pointers are committed. Acquisition responses and data artifacts are materialized
+in the local snapshot store. The Detroit street pipeline is registered and tested;
+the live street collection used the HD-9 region required by the consumer.
 
-## Target
+The Detroit source contains 6,383 named POIs and retains 9,240 non-point source
+geometries separately from routing points. Existing baseline dataset IDs and
+immutable snapshots remain resolvable.
 
-One `strongtowns_data.osm` package owns source identities, query descriptions,
-source serialization, and pure normalization. Internal acquisition functions
-own OSMnx access. The registered pipeline remains the entry point for fetch,
-validation, and promotion; public readers open prepared snapshots.
+## Verification and basemap decision
 
-A source snapshot retains original geometry, OSM element type and ID, all
-returned tags, boundary geometry and hash, requested tags, endpoint, OSMnx
-version, acquisition timestamps, response/cache hashes, and rejection records.
-Keep node/way/relation identities distinct. Street graphs retain edge keys and
-connectivity; display layers are derived products. Record actual collection
-intervals without implying a transactionally consistent OSM snapshot.
+The data suite passed 510 tests with one optional-provider skip. A separate run
+with real OSMnx passed the six routing tests plus two graph/display tests. The
+Detroit repository-boundary/lock tests passed, and the pinned export produced
+four city boundaries, 174 water polygons, and 61,833 street edges with OSMnx import
+and network connections blocked. CI passed on the implementation commits.
 
-Routing points remain separate from source geometry and record how each point
-was derived. Names and categories are downstream interpretations with explicit
-precedence. Keep OSM attribution and license metadata with distributed data.
+The preserved basemap and newly acquired Detroit water layer were compared
+visually and spatially. The historical water query has 218 features versus 170
+for the narrower `natural=water` query. The boundary symmetric difference is
+208,686 square metres (about 0.056% of the old area), with a 188-metre Hausdorff
+distance. Keep the existing `detroit.osm.basemap.raw` pin; use the new HD-9 sources
+for the legislative workflow. Comparison artifacts are in
+`build/osm-simplification/basemap-comparison.{png,json}` locally.
 
-## Implementation sequence
+## Separately scoped follow-up
 
-### 1. Establish the shared POI contract
-
-- Inventory existing manifests and consumers before changing columns. Compare
-  `tests/test_data_osm.py` and `tests/test_krabby_pois.py` fixtures.
-- Define one category query including `craft`; preserve all returned tags, not
-  just the selected category keys. Distinguish a changed query from a changed
-  normalization rule in fingerprints.
-- Define typed empty outputs, explicit missing-CRS failures, duplicate-ID
-  rejection, list/null tag handling, invalid geometry behavior, and input =
-  accepted + rejected accounting.
-- Introduce the source contract as a new major schema version when it changes
-  existing columns or meanings. Preserve existing immutable snapshots and pins.
-
-### 2. Replace the duplicate normalizers
-
-- Move source preparation and routing-point derivation to the shared package.
-- Route registered POI fetch/build through it. Keep a temporary compatibility
-  adapter for the public POI columns; it performs no independent acquisition.
-- Preserve each legacy primary-category rule in its adapter until consumers
-  explicitly migrate. Compare IDs, tags, geometries, and rejection counts.
-- Run one explicit Detroit fetch, validate, build offline, and open the prepared
-  output from a clean checkout. Document the new snapshot before switching pins.
-
-### 3. Migrate consumers and remove duplicate paths
-
-- Move Detroit's legislative street-fetch script to explicit registered
-  acquisition and prepared layers. Keep `filter_arterials` as a pure display
-  operation with coverage for list-valued highway tags.
-- Audit the independent Krabby POI implementation and its acquisition and
-  municipal-context callers; migrate with adapters only after its tests pass.
-  Those files are in another repository and are outside this implementation.
-- Replace active housing-map and isochrone acquisition callers incrementally.
-  Preserve graph topology and analysis behavior; do not combine a routing
-  algorithm rewrite with this acquisition cleanup.
-- Delete old collectors and wrappers once repository searches show no callers.
-
-### 4. Extend the same acquisition contract to basemaps
-
-- Add explicit boundary, water, and street source pipelines using the common
-  query/provenance helpers, with separate schemas for features and graphs.
-- Fingerprint resolved boundary geometry, endpoint, query, and relevant OSMnx
-  settings. Isolate and restore OSMnx global settings between calls.
-- Reuse boundary evidence across water/street builds. Preserve the existing
-  imported basemap until the replacement passes a visual and spatial comparison.
-
-## Acceptance checks
-
-- There is one POI source normalizer and one explicit POI acquisition path.
-- Offline builds/readers cannot invoke OSMnx or the network.
-- Tests cover mixed tags, list values, all-empty/all-rejected inputs, absent CRS,
-  duplicate identities, invalid geometry, and deterministic output ordering.
-- Source polygons survive unchanged; routing points carry their derivation.
-- Cache identity changes with query, boundary, or endpoint, and failed or partial
-  acquisition cannot promote a misleading complete dataset.
-- Existing callers pass through an adapter or migrate with reviewed schema and
-  category differences. Clean-code promotion and historical pins still work.
-
-First implementation PR: shared POI contract, unified normalization, registered
-fetch/build integration, and compatibility adapters. Basemap migration follows
-in a separate PR so the first change has a bounded review and measurable result.
+Krabby retains an independent `krabby_real_estate.pois.osm` collector, used by
+`data/acquisition.py` and `geo/municipal_context.py`. Those callers were audited;
+changing that repository remains outside this implementation, as specified in
+the original plan. Its eventual migration should use the public compatibility
+adapter and validate existing tests before removing its duplicate implementation.
