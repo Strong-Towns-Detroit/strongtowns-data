@@ -12,7 +12,12 @@ from uuid import uuid4
 
 from strongtowns_data.models import ArtifactDescriptor, DataAssetRef
 from strongtowns_data.pipelines.engine import DataBuildSystem
-from strongtowns_data.pipelines.snapshots import SnapshotStore, manifest_hash, sha256, validate_snapshot
+from strongtowns_data.pipelines.snapshots import (
+    SnapshotStore,
+    manifest_hash,
+    sha256,
+    validate_snapshot,
+)
 
 
 @dataclass(frozen=True)

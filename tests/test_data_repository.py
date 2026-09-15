@@ -136,7 +136,8 @@ def test_data_lock_updates_only_requested_promoted_assets(monkeypatch, tmp_path)
 @pytest.fixture
 def materialization(tmp_path):
     from types import SimpleNamespace
-    from strongtowns_data.models import DataAsset, DatasetModel, BuildMetadata
+
+    from strongtowns_data.models import BuildMetadata, DataAsset, DatasetModel
     from strongtowns_data.pipelines.snapshots import SnapshotStore, sha256
     item = DataAsset("example", Path("data/example"), DatasetModel("example", "1.0.0"))
     store = SnapshotStore(tmp_path)
