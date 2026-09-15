@@ -70,7 +70,7 @@ uv run strongtowns-data archive push --tier critical --tier source --apply
 uv run strongtowns-data archive pull --tier critical --tier source --apply
 ```
 
-See [DATA_ARCHIVE.md](../scripts/DATA_ARCHIVE.md) for recovery setup.
+Run `strongtowns-data archive pull --help` for recovery options.
 
 ## Query catalog
 
