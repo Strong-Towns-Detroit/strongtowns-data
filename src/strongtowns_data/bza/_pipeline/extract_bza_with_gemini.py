@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from .._cache import atomic_json
 
-DEFAULT_MODEL = "gemini-3.1-pro-preview"
+DEFAULT_MODEL = "gemini-3.8-flash"
 MANIFEST_LOCK = threading.Lock()
 
 
@@ -137,7 +137,6 @@ def extract_one(
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
                         response_schema=Extraction,
-                        temperature=0,
                     ),
                 )
                 raw_dir.mkdir(parents=True, exist_ok=True)
@@ -185,7 +184,7 @@ def run(
         raise ValueError("Invalid extraction limits")
     raw_dir = output_dir / "gemini_raw"
     manifest = output_dir / "gemini_manifest.jsonl"
-    model = args.model or os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
+    model = args.model or DEFAULT_MODEL
     queue = [args.pdf] if args.pdf is not None else sorted(args.pdf_dir.glob("*.pdf"))
     if args.pdf is not None and not args.pdf.exists():
         raise SystemExit(f"PDF does not exist: {args.pdf}")

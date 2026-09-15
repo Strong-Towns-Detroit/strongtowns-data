@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from .._cache import atomic_json
 
-DEFAULT_MODEL = "gemini-3.1-pro-preview"
+DEFAULT_MODEL = "gemini-3.8-flash"
 WRITE_LOCK = threading.Lock()
 
 
@@ -186,7 +186,6 @@ def classify_batch(
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     response_schema=BatchResult,
-                    temperature=0,
                 ),
             )
             parsed = BatchResult.model_validate_json(response.text)
@@ -295,7 +294,7 @@ def run(
         attempts=attempts,
     )
     per_case_dir = output_dir / "per_case"
-    model = args.model or os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
+    model = args.model or DEFAULT_MODEL
     outcomes = {value.strip() for value in args.outcomes.split(",") if value.strip()}
     histories = pd.read_csv(histories_path)
     selected = (

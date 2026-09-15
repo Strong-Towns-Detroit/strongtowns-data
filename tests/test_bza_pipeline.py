@@ -159,10 +159,12 @@ def test_extraction_writes_only_explicit_output_and_reuses_cache(tmp_path, monke
     from strongtowns_data.bza._pipeline import extract_bza_with_gemini as extractor
 
     monkeypatch.setenv("GEMINI_API_KEY", "unit-test-not-a-real-key")
+    monkeypatch.setenv("GEMINI_MODEL", "obsolete-env-model")
     monkeypatch.setattr(genai, "Client", lambda **kwargs: object())
     calls = []
 
     def extract(client, pdf, model, attempts, raw_dir):
+        assert model in ("gemini-3.8-flash", "changed-model")
         calls.append((pdf, model, raw_dir))
         return extractor.Extraction(meeting_date="2025-01-01", cases=[])
 
@@ -193,9 +195,11 @@ def test_project_classification_resume_and_explicit_paths(tmp_path, monkeypatch)
     histories["first_meeting_date"] = "2025-01-01"
     histories.to_csv(source / "case_histories.csv", index=False)
     monkeypatch.setenv("GEMINI_API_KEY", "unit-test-not-a-real-key")
+    monkeypatch.setenv("GEMINI_MODEL", "obsolete-env-model")
     calls = []
 
     def classify(rows, model, attempts, raw_dir):
+        assert model in ("gemini-3.8-flash", "changed-model")
         calls.append(rows)
         return [
             module.ProjectClassification(
