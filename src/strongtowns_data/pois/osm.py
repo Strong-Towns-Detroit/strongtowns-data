@@ -7,12 +7,9 @@ a grocery, a useful grocery, or relevant to a later score belong in downstream e
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from pathlib import Path
 
 import geopandas as gpd
-import osmnx as ox
-import pandas as pd
 
 DEFAULT_OSM_TAGS = {
     "shop": True,
@@ -44,111 +41,53 @@ _DISPLAY_FIELDS = (
 )
 
 
-def _plain(value):
-    """Convert source values to stable JSON/string-friendly scalars."""
-    if value is None or value is pd.NA:
-        return None
-    try:
-        if pd.isna(value):
-            return None
-    except (TypeError, ValueError):
-        pass
-    if isinstance(value, (str, int, float, bool)):
-        return value
-    if isinstance(value, (list, tuple, set)):
-        return [str(item) for item in value]
-    return str(value)
-
-
-def _first_present(row, names):
-    for name in names:
-        if name in row:
-            value = _plain(row[name])
-            if value not in (None, ""):
-                return value
-    return None
-
-
-def _category(row):
-    for key in _CATEGORY_KEYS:
-        value = _plain(row.get(key))
-        if value not in (None, ""):
-            return key, value
-    return None, None
-
-
 def normalize_osm_pois(features: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Return a stable point catalog while preserving OSM identity and source tags."""
-    if features.crs is None:
-        raise ValueError("OSM features must have a CRS")
+    """Preserve the public schema and shop-first precedence through an adapter."""
+    from strongtowns_data.osm.features import routing_points
 
-    source = features.to_crs("EPSG:4326").reset_index()
-    rows = []
-    for _, row in source.iterrows():
-        geometry = row.geometry
-        if geometry is None or geometry.is_empty:
-            continue
-        source_geometry_type = geometry.geom_type
-        point = geometry if source_geometry_type == "Point" else geometry.representative_point()
-        element_type = _first_present(row, ("element", "element_type", "type")) or "feature"
-        source_id = _first_present(row, ("id", "osmid", "osm_id"))
-        if source_id is None:
-            raise ValueError("OSM feature lacks an element id")
-        category_key, category_value = _category(row)
-        tags = {
-            field: _plain(row.get(field))
-            for field in _DISPLAY_FIELDS
-            if _plain(row.get(field)) is not None
-        }
-        name = _first_present(row, ("name", "brand", "operator"))
-        rows.append(
-            {
-                "poi_id": f"osm:{element_type}:{source_id}",
-                "source": "openstreetmap",
-                "source_element_type": str(element_type),
-                "source_id": str(source_id),
-                "name": name,
-                "primary_category": category_key,
-                "category_value": category_value,
-                "source_geometry_type": source_geometry_type,
-                "longitude": float(point.x),
-                "latitude": float(point.y),
-                "source_tags_json": json.dumps(tags, sort_keys=True),
-                "geometry": point,
-            }
+    points, rejected = routing_points(features, category_order=_CATEGORY_KEYS)
+    tags = points.source_tags_json.map(json.loads)
+    result = points.rename(
+        columns={"source_id": "poi_id", "osm_type": "source_element_type", "osm_id": "source_id"}
+    ).drop(columns="routing_point_method")
+    result["source"] = "openstreetmap"
+    result["name"] = tags.map(
+        lambda t: next(
+            (t[k] for k in ("name", "brand", "operator") if t.get(k) not in (None, "")), None
         )
-
-    columns = [
-        "poi_id",
-        "source",
-        "source_element_type",
-        "source_id",
-        "name",
-        "primary_category",
-        "category_value",
-        "source_geometry_type",
-        "longitude",
-        "latitude",
-        "source_tags_json",
-        "geometry",
+    )
+    result["longitude"] = points.geometry.x
+    result["latitude"] = points.geometry.y
+    result["source_tags_json"] = tags.map(
+        lambda t: json.dumps({k: t[k] for k in _DISPLAY_FIELDS if k in t}, sort_keys=True)
+    )
+    result = result[
+        [
+            "poi_id",
+            "source",
+            "source_element_type",
+            "source_id",
+            "name",
+            "primary_category",
+            "category_value",
+            "source_geometry_type",
+            "longitude",
+            "latitude",
+            "source_tags_json",
+            "geometry",
+        ]
     ]
-    return gpd.GeoDataFrame(rows, columns=columns, geometry="geometry", crs="EPSG:4326")
+    result.attrs["rejections"] = rejected.to_dict("records")
+    return result
 
 
-def collect_osm_pois(
-    *,
-    place: str | None = None,
-    boundary=None,
-    tags: Mapping[str, object] = DEFAULT_OSM_TAGS,
-) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
-    """Collect broad OSM features for a place or polygon and return raw + normalized data."""
-    if (place is None) == (boundary is None):
-        raise ValueError("provide exactly one of place= or boundary=")
-    if place is not None:
-        raw = ox.features_from_place(place, tags=dict(tags))
-    else:
-        raw = ox.features_from_polygon(boundary, tags=dict(tags))
-    return raw, normalize_osm_pois(raw)
+def collect_osm_pois(*, place=None, boundary=None, tags=DEFAULT_OSM_TAGS):
+    """Compatibility entry point for explicit acquisition; returns raw + points."""
+    from strongtowns_data.osm.acquisition import acquire_features
+
+    result = acquire_features(place=place, boundary=boundary, tags=tags)
+    result.data.attrs["acquisition"] = result.metadata
+    return result.data, normalize_osm_pois(result.data)
 
 
 def write_osm_snapshot(

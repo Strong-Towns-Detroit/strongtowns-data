@@ -689,3 +689,9 @@ def detroit_bza_atlas() -> DataPipeline:
 
     return DataPipeline("detroit-bza-atlas", (BZA_GEMINI_RAW.id,),
                         (asset,), build=build, description="Prepared BZA histories and audited atlas tables.")
+
+# Imported factories are discovered alongside the legacy definitions above.
+from strongtowns_data.osm.pipelines import (  # noqa: E402, F401
+    canonical_detroit_osm_pois_v2,
+    detroit_osm_pois_source_v2,
+)
