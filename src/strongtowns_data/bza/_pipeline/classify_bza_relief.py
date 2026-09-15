@@ -3,17 +3,12 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import re
 from collections import Counter
 from pathlib import Path
 
 import pandas as pd
-
-HERE = Path(__file__).resolve().parent
-DEFAULT_INPUT = HERE / "bza_dataset_gemini/all_cases.csv"
-DEFAULT_OUTPUT = HERE / "bza_dataset_gemini"
 
 # Categories are multi-label. Patterns target the requested waiver or appeal,
 # not merely the proposed land use. Every match is retained as evidence.
@@ -118,7 +113,8 @@ ROUTE_RULES: dict[str, list[str]] = {
         r"\bcommunity appeal\b",
     ],
     "use_or_spacing_variance": [
-        r"\bspacing variance\b", r"\bvariance of spacing regulation\b",
+        r"\bspacing variance\b",
+        r"\bvariance of spacing regulation\b",
         r"\buse variance\b",
     ],
     "nonconforming_review": [r"\bnonconforming (?:use|structure|building|billboard)\b"],
@@ -147,7 +143,9 @@ def basic_text(value: object) -> str:
     return re.sub(r"\s+", " ", text.lower()).strip()
 
 
-def classify(text: str, rules: dict[str, list[str]]) -> tuple[list[str], dict[str, list[str]]]:
+def classify(
+    text: str, rules: dict[str, list[str]]
+) -> tuple[list[str], dict[str, list[str]]]:
     labels: list[str] = []
     evidence: dict[str, list[str]] = {}
     for label, patterns in rules.items():
@@ -196,19 +194,31 @@ def run(input_path: Path, output_dir: Path) -> None:
     # number, except case numbers proven ambiguous by appearing twice on one
     # meeting date (the corpus contains one such printed-number collision).
     ambiguous_numbers = set(
-        frame.groupby(["case_number", "meeting_date"]).size().loc[lambda x: x > 1]
+        frame.groupby(["case_number", "meeting_date"])
+        .size()
+        .loc[lambda x: x > 1]
         .reset_index()["case_number"]
     )
     for case_number, indexes in frame.groupby("case_number").groups.items():
         if case_number in ambiguous_numbers:
             continue
         group = frame.loc[indexes]
-        relief_union = sorted({
-            label for value in group["relief_categories"] for label in value.split("|") if label
-        })
-        route_union = sorted({
-            label for value in group["case_routes"] for label in value.split("|") if label
-        })
+        relief_union = sorted(
+            {
+                label
+                for value in group["relief_categories"]
+                for label in value.split("|")
+                if label
+            }
+        )
+        route_union = sorted(
+            {
+                label
+                for value in group["case_routes"]
+                for label in value.split("|")
+                if label
+            }
+        )
         for index in indexes:
             inherited = False
             if not frame.at[index, "relief_categories"] and relief_union:
@@ -220,10 +230,9 @@ def run(input_path: Path, output_dir: Path) -> None:
             if inherited:
                 frame.at[index, "classification_source"] = "inherited_case_history"
     empty = frame["relief_categories"].eq("") & frame["case_routes"].eq("")
-    dimensional_unspecified = (
-        frame["relief_categories"].eq("")
-        & frame["case_routes"].str.contains("dimensional_variance", regex=False)
-    )
+    dimensional_unspecified = frame["relief_categories"].eq("") & frame[
+        "case_routes"
+    ].str.contains("dimensional_variance", regex=False)
     frame.loc[dimensional_unspecified, "relief_categories"] = (
         "dimensional_relief_unspecified"
     )
@@ -238,7 +247,10 @@ def run(input_path: Path, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     frame.to_csv(output_dir / "classified_cases.csv", index=False)
     frame.to_json(
-        output_dir / "classified_cases.json", orient="records", indent=2, force_ascii=False
+        output_dir / "classified_cases.json",
+        orient="records",
+        indent=2,
+        force_ascii=False,
     )
 
     minutes = frame[frame["record_type"].eq("minutes_case")]
@@ -261,7 +273,9 @@ def run(input_path: Path, output_dir: Path) -> None:
         {"classification": label, "cases": count, "kind": "route"}
         for label, count in route_counts.most_common()
     ]
-    pd.DataFrame(summary_rows).to_csv(output_dir / "classification_summary.csv", index=False)
+    pd.DataFrame(summary_rows).to_csv(
+        output_dir / "classification_summary.csv", index=False
+    )
 
     not_stated = minutes["relief_categories"].eq("request_not_stated")
     unspecified = minutes["relief_categories"].eq("dimensional_relief_unspecified")
@@ -282,15 +296,3 @@ def run(input_path: Path, output_dir: Path) -> None:
         json.dumps(audit, indent=2), encoding="utf-8"
     )
     print(json.dumps(audit, indent=2))
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
-    args = parser.parse_args()
-    run(args.input, args.output_dir)
-
-
-if __name__ == "__main__":
-    main()

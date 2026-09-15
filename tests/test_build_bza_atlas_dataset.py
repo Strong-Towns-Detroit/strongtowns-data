@@ -2,7 +2,7 @@ import geopandas as gpd
 import pandas as pd
 from shapely.geometry import box
 
-from build_bza_atlas_dataset import build_tables
+from strongtowns_data.bza._pipeline.build_bza_atlas_dataset import build_tables
 
 
 def sample_inputs(count=10, mapped=8):

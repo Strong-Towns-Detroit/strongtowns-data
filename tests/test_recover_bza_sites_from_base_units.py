@@ -1,6 +1,6 @@
 import pandas as pd
 
-from recover_bza_sites_from_base_units import build_recoveries
+from strongtowns_data.bza._pipeline.recover_bza_sites_from_base_units import build_recoveries
 
 
 def test_base_units_secondary_address_recovers_current_parcel():

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import re
@@ -11,13 +10,6 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
-
-HERE = Path(__file__).resolve().parent
-DEFAULT_CASES = HERE / "bza_dataset_gemini/classified_cases.csv"
-DEFAULT_OCCURRENCES = HERE / "bza_dataset_gemini/case_occurrences.csv"
-DEFAULT_PARCELS = HERE.parent / "parcel-data/parcels_with_compliance.gpkg"
-DEFAULT_OVERRIDES = HERE / "bza_site_overrides.csv"
-DEFAULT_OUTPUT = HERE / "bza_dataset_gemini"
 
 SUFFIXES = (
     r"\b(?:AVENUE|AVE|STREET|ST|ROAD|RD|BOULEVARD|BLVD|DRIVE|DR|"
@@ -69,7 +61,9 @@ def address_candidates(location: object) -> list[tuple[int, str]]:
     lead = re.split(
         r"\b(?:BETWEEN|LOCATED|CITY COUNCIL|COUNCIL DISTRICT|"
         r"SURROUNDING STREETS|BORDERED BY|CORNER OF)\b",
-        raw, 1, flags=re.I,
+        raw,
+        1,
+        flags=re.I,
     )[0]
     aliases = re.findall(
         r"\bAKA\s+(.+?)(?=\bBETWEEN\b|\bIN\s+(?:AN?\s+)?[A-Z0-9-]+\s+"
@@ -77,9 +71,7 @@ def address_candidates(location: object) -> list[tuple[int, str]]:
         raw,
         flags=re.I,
     )
-    parenthetical_addresses = re.findall(
-        r"\(\s*(\d{1,6}\s+[A-Za-z][^)]+)\)", raw
-    )
+    parenthetical_addresses = re.findall(r"\(\s*(\d{1,6}\s+[A-Za-z][^)]+)\)", raw)
     lead = re.sub(r"\([^)]*\)", " ", lead)
     lead_before_aka = re.split(r"\bAKA\b", lead, 1, flags=re.I)[0]
     lead = re.sub(r"\bAKA\b.*$", " ", lead, flags=re.I)
@@ -96,7 +88,8 @@ def address_candidates(location: object) -> list[tuple[int, str]]:
         match = re.search(
             r"\b(\d{1,6}(?:\s*(?:,|&|AND|-|THRU|TO)\s*\d{1,6})*)"
             r"(?:\s+|(?=[A-Za-z]))(.+)",
-            segment, flags=re.I,
+            segment,
+            flags=re.I,
         )
         if not match:
             bare = re.fullmatch(
@@ -109,7 +102,12 @@ def address_candidates(location: object) -> list[tuple[int, str]]:
             continue
         numbers = expanded_numbers(match.group(1))
         street = clean_street(
-            re.split(r"\s+\b(?:IN|WITHIN)\b\s+(?:AN?\s+)?[A-Z0-9-]+", match.group(2), 1, flags=re.I)[0]
+            re.split(
+                r"\s+\b(?:IN|WITHIN)\b\s+(?:AN?\s+)?[A-Z0-9-]+",
+                match.group(2),
+                1,
+                flags=re.I,
+            )[0]
         )
         if street:
             candidates.extend((number, street) for number in numbers)
@@ -120,7 +118,8 @@ def address_candidates(location: object) -> list[tuple[int, str]]:
         ]
     if aliases:
         alias_candidates = [
-            candidate for candidate in candidates
+            candidate
+            for candidate in candidates
             if any(str(candidate[0]) in alias for alias in aliases)
         ]
         bare_primary = re.fullmatch(r"\s*(\d{1,6})\s*", lead_before_aka)
@@ -147,20 +146,23 @@ def build_matches(
         ["occurrence_id", "location"]
     ].merge(
         occurrence_map[["occurrence_id", "case_history_id"]],
-        on="occurrence_id", how="inner",
+        on="occurrence_id",
+        how="inner",
     )
     extracted = []
     for row in minutes.itertuples():
         for number, street in address_candidates(row.location):
-            extracted.append({
-                "case_history_id": row.case_history_id,
-                "occurrence_id": row.occurrence_id,
-                "site_key": site_key(number, street),
-                "site_id": site_id(site_key(number, street)),
-                "number": number,
-                "street": street,
-                "source_location": row.location,
-            })
+            extracted.append(
+                {
+                    "case_history_id": row.case_history_id,
+                    "occurrence_id": row.occurrence_id,
+                    "site_key": site_key(number, street),
+                    "site_id": site_id(site_key(number, street)),
+                    "number": number,
+                    "street": street,
+                    "source_location": row.location,
+                }
+            )
     candidates = pd.DataFrame(extracted).drop_duplicates(
         ["case_history_id", "site_key"]
     )
@@ -183,35 +185,43 @@ def build_matches(
 
     exact = candidates.merge(
         parcels[["number", "street", "parcel_id", "address", "geometry"]],
-        on=["number", "street"], how="left",
+        on=["number", "street"],
+        how="left",
     )
-    exact["match_method"] = exact["geometry"].notna().map(
-        {True: "exact", False: "unmatched"}
+    exact["match_method"] = (
+        exact["geometry"].notna().map({True: "exact", False: "unmatched"})
     )
 
-    missing_keys = exact.loc[exact["geometry"].isna(), [
-        "case_history_id", "site_key", "number", "street_nodir"
-    ]].drop_duplicates()
+    missing_keys = exact.loc[
+        exact["geometry"].isna(),
+        ["case_history_id", "site_key", "number", "street_nodir"],
+    ].drop_duplicates()
     # Directionless fallback is allowed only when all matches resolve to one
     # directional street name; condo/unit parcel multiplicity is retained.
     fallback_source = parcels.groupby(["number", "street_nodir"]).filter(
         lambda group: group["street"].nunique() == 1
     )
     fallback = missing_keys.merge(
-        fallback_source[
-            ["number", "street_nodir", "parcel_id", "address", "geometry"]
-        ],
-        on=["number", "street_nodir"], how="left",
+        fallback_source[["number", "street_nodir", "parcel_id", "address", "geometry"]],
+        on=["number", "street_nodir"],
+        how="left",
     )
     fallback = fallback[fallback["geometry"].notna()].copy()
     fallback["match_method"] = "direction_omitted"
     if not fallback.empty:
         base = candidates.merge(
-            fallback[[
-                "case_history_id", "site_key", "parcel_id", "address",
-                "geometry", "match_method",
-            ]],
-            on=["case_history_id", "site_key"], how="inner",
+            fallback[
+                [
+                    "case_history_id",
+                    "site_key",
+                    "parcel_id",
+                    "address",
+                    "geometry",
+                    "match_method",
+                ]
+            ],
+            on=["case_history_id", "site_key"],
+            how="inner",
         )
         exact = pd.concat([exact[exact["geometry"].notna()], base], ignore_index=True)
     else:
@@ -228,15 +238,19 @@ def build_matches(
             source = candidates[candidates["site_key"].eq(row.site_key)]
             for candidate in source.itertuples():
                 parcel = parcel_by_id.loc[row.parcel_id]
-                override_rows.append({
-                    **candidate._asdict(),
-                    "parcel_id": row.parcel_id,
-                    "address": parcel.address,
-                    "geometry": parcel.geometry,
-                    "match_method": "manual_override",
-                })
+                override_rows.append(
+                    {
+                        **candidate._asdict(),
+                        "parcel_id": row.parcel_id,
+                        "address": parcel.address,
+                        "geometry": parcel.geometry,
+                        "match_method": "manual_override",
+                    }
+                )
     if override_rows:
-        override_keys = {(row["case_history_id"], row["site_key"]) for row in override_rows}
+        override_keys = {
+            (row["case_history_id"], row["site_key"]) for row in override_rows
+        }
         exact = exact[
             ~exact.apply(
                 lambda row: (row.case_history_id, row.site_key) in override_keys,
@@ -247,17 +261,23 @@ def build_matches(
 
     matched_keys = set(zip(exact["case_history_id"], exact["site_key"]))
     candidates["match_status"] = candidates.apply(
-        lambda row: "matched"
-        if (row.case_history_id, row.site_key) in matched_keys else "unmatched",
+        lambda row: (
+            "matched"
+            if (row.case_history_id, row.site_key) in matched_keys
+            else "unmatched"
+        ),
         axis=1,
     )
     counts = exact.groupby(["case_history_id", "site_key"]).size()
-    candidates["parcel_match_count"] = candidates.set_index(
-        ["case_history_id", "site_key"]
-    ).index.map(counts).fillna(0).astype(int)
-    candidates.loc[
-        candidates["parcel_match_count"].gt(1), "match_status"
-    ] = "matched_multiple_parcels"
+    candidates["parcel_match_count"] = (
+        candidates.set_index(["case_history_id", "site_key"])
+        .index.map(counts)
+        .fillna(0)
+        .astype(int)
+    )
+    candidates.loc[candidates["parcel_match_count"].gt(1), "match_status"] = (
+        "matched_multiple_parcels"
+    )
 
     geodata = gpd.GeoDataFrame(exact, geometry="geometry", crs=parcels.crs)
     histories_with_candidates = set(candidates["case_history_id"])
@@ -269,8 +289,12 @@ def build_matches(
         "histories_with_any_parcel_match": len(histories_matched),
         "application_match_share": len(histories_matched) / len(all_histories),
         "address_candidates": int(len(candidates)),
-        "matched_address_candidates": int(candidates["match_status"].ne("unmatched").sum()),
-        "unmatched_address_candidates": int(candidates["match_status"].eq("unmatched").sum()),
+        "matched_address_candidates": int(
+            candidates["match_status"].ne("unmatched").sum()
+        ),
+        "unmatched_address_candidates": int(
+            candidates["match_status"].eq("unmatched").sum()
+        ),
         "matched_multiple_parcels": int(
             candidates["match_status"].eq("matched_multiple_parcels").sum()
         ),
@@ -293,8 +317,12 @@ def run(
     parcels = gpd.read_file(
         parcels_path,
         columns=[
-            "parcel_id", "address", "street_number", "street_prefix",
-            "street_name", "geometry",
+            "parcel_id",
+            "address",
+            "street_number",
+            "street_prefix",
+            "street_name",
+            "geometry",
         ],
     )
     overrides = pd.read_csv(overrides_path)
@@ -310,18 +338,3 @@ def run(
         json.dumps(audit, indent=2), encoding="utf-8"
     )
     print(json.dumps(audit, indent=2))
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
-    parser.add_argument("--occurrences", type=Path, default=DEFAULT_OCCURRENCES)
-    parser.add_argument("--parcels", type=Path, default=DEFAULT_PARCELS)
-    parser.add_argument("--overrides", type=Path, default=DEFAULT_OVERRIDES)
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
-    args = parser.parse_args()
-    run(args.cases, args.occurrences, args.parcels, args.overrides, args.output_dir)
-
-
-if __name__ == "__main__":
-    main()

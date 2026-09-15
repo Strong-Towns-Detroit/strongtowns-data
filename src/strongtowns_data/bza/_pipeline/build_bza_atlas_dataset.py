@@ -3,16 +3,11 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
-
-HERE = Path(__file__).resolve().parent
-DEFAULT_INPUT = HERE / "bza_dataset_gemini"
-DEFAULT_OUTPUT = HERE / "bza_dataset_gemini"
 
 MIN_CASES = 10
 MIN_MATCH_SHARE = 0.80
@@ -82,9 +77,7 @@ def build_tables(
         ids = applications.loc[missing_histories, "case_history_id"].tolist()
         raise ValueError(f"Categories without case histories: {ids[:5]}")
 
-    sites = sites.drop_duplicates(
-        ["case_history_id", "site_id", "parcel_id"]
-    ).copy()
+    sites = sites.drop_duplicates(["case_history_id", "site_id", "parcel_id"]).copy()
     mapped_ids = set(sites["case_history_id"])
     applications["mapped"] = applications["case_history_id"].isin(mapped_ids)
     applications["atlas_tier"] = applications["category"].map(atlas_tier)
@@ -121,8 +114,13 @@ def build_tables(
     ).drop(columns="_tier_order")
 
     site_columns = [
-        "case_history_id", "site_id", "site_key", "parcel_id", "address",
-        "match_method", "geometry",
+        "case_history_id",
+        "site_id",
+        "site_key",
+        "parcel_id",
+        "address",
+        "match_method",
+        "geometry",
     ]
     mapped = sites[site_columns].merge(
         applications,
@@ -134,9 +132,7 @@ def build_tables(
 
     audit = {
         "case_histories": int(histories["case_history_id"].nunique()),
-        "categorized_case_histories": int(
-            applications["case_history_id"].nunique()
-        ),
+        "categorized_case_histories": int(applications["case_history_id"].nunique()),
         "category_assignments": int(len(applications)),
         "mapped_category_assignments": int(applications["mapped"].sum()),
         "publication_gate": {
@@ -173,9 +169,7 @@ def run(input_dir: Path, output_dir: Path) -> None:
     histories = pd.read_csv(input_dir / "case_histories.csv")
     categories = pd.read_csv(input_dir / "case_categories.csv")
     sites = gpd.read_file(input_dir / "map_sites.gpkg")
-    applications, mapped, summary, audit = build_tables(
-        histories, categories, sites
-    )
+    applications, mapped, summary, audit = build_tables(histories, categories, sites)
     applications.to_csv(output_dir / "atlas_applications.csv", index=False)
     mapped.to_file(output_dir / "atlas_category_sites.gpkg", driver="GPKG")
     summary.to_csv(output_dir / "atlas_category_summary.csv", index=False)
@@ -184,15 +178,3 @@ def run(input_dir: Path, output_dir: Path) -> None:
     )
     print(summary.to_string(index=False))
     print(json.dumps(audit, indent=2))
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input-dir", type=Path, default=DEFAULT_INPUT)
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
-    args = parser.parse_args()
-    run(args.input_dir, args.output_dir)
-
-
-if __name__ == "__main__":
-    main()

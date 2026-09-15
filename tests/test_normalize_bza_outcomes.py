@@ -1,6 +1,6 @@
 import pandas as pd
 
-from normalize_bza_outcomes import normalize_occurrence
+from strongtowns_data.bza._pipeline.normalize_bza_outcomes import normalize_occurrence
 
 
 def outcome(decision_status, decision):

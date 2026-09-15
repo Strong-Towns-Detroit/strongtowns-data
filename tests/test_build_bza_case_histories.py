@@ -1,6 +1,6 @@
 import pandas as pd
 
-from build_bza_case_histories import build_histories, make_history_id
+from strongtowns_data.bza._pipeline.build_bza_case_histories import build_histories, make_history_id
 
 
 def row(occurrence_id, case_number, date, location="100 Main", category="parking_supply"):

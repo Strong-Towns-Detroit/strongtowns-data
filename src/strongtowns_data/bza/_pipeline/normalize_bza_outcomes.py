@@ -3,17 +3,11 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import re
 from pathlib import Path
 
 import pandas as pd
-
-HERE = Path(__file__).resolve().parent
-DEFAULT_OCCURRENCES = HERE / "bza_dataset_gemini/case_occurrences.csv"
-DEFAULT_HISTORIES = HERE / "bza_dataset_gemini/case_histories.csv"
-DEFAULT_OUTPUT = HERE / "bza_dataset_gemini"
 
 POSITIVE = re.compile(
     r"\b(?:GRANT(?:ED)?|APPROV(?:E|ED)|REVERS(?:E|ED)|"
@@ -86,17 +80,21 @@ def build_outcomes(
         substantive = set(merit_rows["normalized_outcome"])
         if "granted_reversed" in substantive and "denied_upheld" in substantive:
             conflicting_histories.append(history_id)
-        final_rows.append({
-            "case_history_id": history_id,
-            "final_outcome": chosen["normalized_outcome"],
-            "final_outcome_date": chosen["meeting_date"].date().isoformat(),
-            "final_outcome_occurrence_id": chosen["occurrence_id"],
-            "final_outcome_basis": outcome_basis,
-        })
+        final_rows.append(
+            {
+                "case_history_id": history_id,
+                "final_outcome": chosen["normalized_outcome"],
+                "final_outcome_date": chosen["meeting_date"].date().isoformat(),
+                "final_outcome_occurrence_id": chosen["occurrence_id"],
+                "final_outcome_basis": outcome_basis,
+            }
+        )
     finals = pd.DataFrame(final_rows)
     histories = histories.drop(
         columns=[
-            "final_outcome", "final_outcome_date", "final_outcome_occurrence_id",
+            "final_outcome",
+            "final_outcome_date",
+            "final_outcome_occurrence_id",
             "final_outcome_basis",
         ],
         errors="ignore",
@@ -105,9 +103,9 @@ def build_outcomes(
     audit = {
         "case_histories": int(len(histories)),
         "final_outcome_counts": histories["final_outcome"].value_counts().to_dict(),
-        "occurrence_outcome_counts": occurrences[
-            "normalized_outcome"
-        ].value_counts().to_dict(),
+        "occurrence_outcome_counts": occurrences["normalized_outcome"]
+        .value_counts()
+        .to_dict(),
         "histories_with_conflicting_substantive_outcomes": conflicting_histories,
         "mixed_or_other_occurrence_ids": occurrences.loc[
             occurrences["normalized_outcome"].eq("mixed_or_other_decided"),
@@ -127,16 +125,3 @@ def run(occurrences_path: Path, histories_path: Path, output_dir: Path) -> None:
         json.dumps(audit, indent=2), encoding="utf-8"
     )
     print(json.dumps(audit, indent=2))
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--occurrences", type=Path, default=DEFAULT_OCCURRENCES)
-    parser.add_argument("--histories", type=Path, default=DEFAULT_HISTORIES)
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
-    args = parser.parse_args()
-    run(args.occurrences, args.histories, args.output_dir)
-
-
-if __name__ == "__main__":
-    main()

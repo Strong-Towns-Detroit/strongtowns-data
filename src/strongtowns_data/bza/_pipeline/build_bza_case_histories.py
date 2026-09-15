@@ -3,19 +3,12 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import re
 from pathlib import Path
 
 import pandas as pd
-
-HERE = Path(__file__).resolve().parent
-DEFAULT_INPUT = HERE / "bza_dataset_gemini/classified_cases.csv"
-DEFAULT_OVERRIDES = HERE / "bza_case_history_overrides.csv"
-DEFAULT_RELIEF_REVIEWS = HERE / "bza_relief_case_reviews.csv"
-DEFAULT_OUTPUT = HERE / "bza_dataset_gemini"
 
 
 def normalize_case_number(value: object) -> str:
@@ -50,8 +43,12 @@ def build_histories(
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
     minutes = frame[frame["record_type"].eq("minutes_case")].copy()
     minutes["meeting_date"] = pd.to_datetime(minutes["meeting_date"])
-    override_map = overrides.set_index("occurrence_id")["history_discriminator"].to_dict()
-    minutes["history_discriminator"] = minutes["occurrence_id"].map(override_map).fillna("default")
+    override_map = overrides.set_index("occurrence_id")[
+        "history_discriminator"
+    ].to_dict()
+    minutes["history_discriminator"] = (
+        minutes["occurrence_id"].map(override_map).fillna("default")
+    )
     minutes["case_history_id"] = minutes.apply(
         lambda row: make_history_id(row["case_number"], row["history_discriminator"]),
         axis=1,
@@ -89,7 +86,9 @@ def build_histories(
                 "last_meeting_date": group["meeting_date"].max().date().isoformat(),
                 "appearance_count": int(group["meeting_date"].nunique()),
                 "occurrence_count": int(len(group)),
-                "occurrence_ids": "|".join(group.sort_values("meeting_date")["occurrence_id"]),
+                "occurrence_ids": "|".join(
+                    group.sort_values("meeting_date")["occurrence_id"]
+                ),
                 "meeting_dates": "|".join(
                     sorted(group["meeting_date"].dt.date.astype(str).unique())
                 ),
@@ -102,9 +101,9 @@ def build_histories(
         )
         for category in relief:
             source_rows = group[
-                group["relief_categories"].fillna("").map(
-                    lambda value: category in split_labels(value)
-                )
+                group["relief_categories"]
+                .fillna("")
+                .map(lambda value: category in split_labels(value))
             ]
             sources = sorted(set(source_rows["classification_source"].dropna()))
             evidence = []
@@ -135,8 +134,11 @@ def build_histories(
     if relief_reviews is not None and not relief_reviews.empty:
         reviews = relief_reviews.fillna("").copy()
         required = {
-            "case_history_id", "printed_case_number", "review_status",
-            "categories", "evidence",
+            "case_history_id",
+            "printed_case_number",
+            "review_status",
+            "categories",
+            "evidence",
         }
         missing_columns = sorted(required - set(reviews.columns))
         if missing_columns:
@@ -152,13 +154,13 @@ def build_histories(
         if unknown_statuses:
             raise ValueError(f"Unknown relief-review statuses: {unknown_statuses}")
         history_index = histories_frame.set_index("case_history_id")
-        missing_ids = sorted(
-            set(reviews["case_history_id"]) - set(history_index.index)
-        )
+        missing_ids = sorted(set(reviews["case_history_id"]) - set(history_index.index))
         if missing_ids:
             raise ValueError(f"Relief-review IDs absent from histories: {missing_ids}")
         for review in reviews.itertuples(index=False):
-            printed = str(history_index.loc[review.case_history_id, "printed_case_number"])
+            printed = str(
+                history_index.loc[review.case_history_id, "printed_case_number"]
+            )
             if printed != str(review.printed_case_number):
                 raise ValueError(
                     f"Relief review {review.case_history_id} says case "
@@ -186,9 +188,7 @@ def build_histories(
             categories_frame = categories_frame[
                 ~(
                     categories_frame["case_history_id"].eq(review.case_history_id)
-                    & categories_frame["category"].eq(
-                        "dimensional_relief_unspecified"
-                    )
+                    & categories_frame["category"].eq("dimensional_relief_unspecified")
                 )
             ]
             evidence = json.dumps(
@@ -232,11 +232,19 @@ def build_histories(
             ),
         }
     occurrence_columns = [
-        "occurrence_id", "case_history_id", "case_number", "meeting_date",
-        "decision_status", "decision", "decision_basis", "source_file",
+        "occurrence_id",
+        "case_history_id",
+        "case_number",
+        "meeting_date",
+        "decision_status",
+        "decision",
+        "decision_basis",
+        "source_file",
     ]
     occurrences_frame = minutes[occurrence_columns].copy()
-    occurrences_frame["meeting_date"] = occurrences_frame["meeting_date"].dt.date.astype(str)
+    occurrences_frame["meeting_date"] = occurrences_frame[
+        "meeting_date"
+    ].dt.date.astype(str)
 
     repeated_numbers = int(
         histories_frame.groupby("printed_case_number").size().gt(1).sum()
@@ -286,19 +294,3 @@ def run(
         json.dumps(audit, indent=2), encoding="utf-8"
     )
     print(json.dumps(audit, indent=2))
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
-    parser.add_argument("--overrides", type=Path, default=DEFAULT_OVERRIDES)
-    parser.add_argument(
-        "--relief-reviews", type=Path, default=DEFAULT_RELIEF_REVIEWS
-    )
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
-    args = parser.parse_args()
-    run(args.input, args.overrides, args.relief_reviews, args.output_dir)
-
-
-if __name__ == "__main__":
-    main()

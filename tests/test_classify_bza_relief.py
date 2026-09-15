@@ -1,4 +1,4 @@
-from classify_bza_relief import RELIEF_RULES, classify, normalize_text
+from strongtowns_data.bza._pipeline.classify_bza_relief import RELIEF_RULES, classify, normalize_text
 
 
 def labels(text: str) -> list[str]:

@@ -18,7 +18,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - run: uv sync --frozen --extra dev
+      - run: uv sync --frozen --extra dev --extra minutes
       - run: >-
           uv run ruff check
           src/strongtowns_data/repository.py
@@ -29,7 +29,7 @@ jobs:
           tests/test_data_repository.py
           tests/test_data_models.py
           tests/test_krabby_*.py
-      - run: uv run pytest -q tests/test_data_*.py tests/test_land_values.py tests/test_mapping.py tests/test_krabby_*.py
+      - run: uv run pytest -q tests/test_data_*.py tests/test_land_values.py tests/test_mapping.py tests/test_krabby_*.py tests/test_bza*.py tests/test_build_bza*.py tests/test_classify_bza*.py tests/test_enrich_bza*.py tests/test_normalize_bza*.py tests/test_recover_bza*.py
       - run: uv build
       - name: Smoke-test the built wheel
         run: |

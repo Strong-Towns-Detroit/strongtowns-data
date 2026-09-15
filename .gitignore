@@ -36,3 +36,6 @@ resources/municode/**/raw/
 data/zoning-ordinance/cross-references.json
 data/zoning-ordinance/applicability-scopes.json
 data/zoning-ordinance/coverage.json
+
+build/
+dist/

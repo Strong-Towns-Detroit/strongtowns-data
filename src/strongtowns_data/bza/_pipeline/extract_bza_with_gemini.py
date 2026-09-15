@@ -8,27 +8,22 @@ document; existing outputs are never overwritten unless --force is supplied.
 
 from __future__ import annotations
 
-import argparse
 import concurrent.futures
+import hashlib
 import json
 import os
 import random
-import re
-import subprocess
 import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-HERE = Path(__file__).resolve().parent
-PDF_DIR = HERE / "bza_minutes"
-DATASET_DIR = HERE / "bza_dataset_gemini"
-OUTPUT_DIR = DATASET_DIR / "per_doc"
-RAW_DIR = DATASET_DIR / "gemini_raw"
-MANIFEST = DATASET_DIR / "gemini_manifest.jsonl"
+from .._cache import atomic_json
+
 DEFAULT_MODEL = "gemini-3.1-pro-preview"
 MANIFEST_LOCK = threading.Lock()
 
@@ -51,8 +46,15 @@ class BzaCase(BaseModel):
     abstentions: list[str] = Field(default_factory=list)
     decision: str | None
     decision_status: Literal[
-        "decided", "under_advisement", "tabled", "postponed",
-        "withdrawn", "dismissed", "not_recorded", "no_action", "unknown",
+        "decided",
+        "under_advisement",
+        "tabled",
+        "postponed",
+        "withdrawn",
+        "dismissed",
+        "not_recorded",
+        "no_action",
+        "unknown",
     ]
     confidence: Literal["high", "medium", "low"]
     confidence_note: str | None
@@ -96,42 +98,25 @@ Perform a second pass before answering: enumerate visible CASE NO. blocks and
 ensure the output has exactly one record for each."""
 
 
-def load_dotenv(path: Path) -> None:
-    if not path.exists():
-        return
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
-
-
 def date_from_name(path: Path) -> str:
-    match = re.match(r"(\d{4}-\d{2}-\d{2})", path.name)
-    if not match:
-        raise ValueError(f"no ISO date prefix: {path.name}")
-    return match.group(1)
+    from .filenames import parse_date
+
+    value = parse_date(path.name)
+    if value is None:
+        raise ValueError(f"No valid meeting date in PDF filename: {path.name}")
+    return value.isoformat()
 
 
-def candidates(pdf_dir: Path, output_dir: Path, force: bool) -> list[Path]:
-    pdfs = sorted(pdf_dir.glob("*.pdf"))
-    if force:
-        return pdfs
-    return [
-        pdf for pdf in pdfs
-        if not (output_dir / f"{pdf.stem}_cases.json").exists()
-    ]
-
-
-def append_manifest(record: dict) -> None:
-    MANIFEST.parent.mkdir(parents=True, exist_ok=True)
+def append_manifest(record: dict, manifest: Path) -> None:
+    manifest.parent.mkdir(parents=True, exist_ok=True)
     with MANIFEST_LOCK:
-        with MANIFEST.open("a") as handle:
+        with manifest.open("a") as handle:
             handle.write(json.dumps(record) + "\n")
 
 
-def extract_one(client, pdf: Path, model: str, attempts: int) -> Extraction:
+def extract_one(
+    client, pdf: Path, model: str, attempts: int, raw_dir: Path
+) -> Extraction:
     from google.genai import types
 
     uploaded = client.files.upload(
@@ -155,13 +140,13 @@ def extract_one(client, pdf: Path, model: str, attempts: int) -> Extraction:
                         temperature=0,
                     ),
                 )
-                RAW_DIR.mkdir(parents=True, exist_ok=True)
-                (RAW_DIR / f"{pdf.stem}.json").write_text(response.text)
+                raw_dir.mkdir(parents=True, exist_ok=True)
+                (raw_dir / f"{pdf.stem}.json").write_text(response.text)
                 return Extraction.model_validate_json(response.text)
             except Exception:
                 if attempt == attempts:
                     raise
-                time.sleep((2 ** attempt) + random.random())
+                time.sleep((2**attempt) + random.random())
     finally:
         try:
             client.files.delete(name=uploaded.name)
@@ -169,39 +154,66 @@ def extract_one(client, pdf: Path, model: str, attempts: int) -> Extraction:
             pass
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--pdf-dir", type=Path, default=PDF_DIR)
-    parser.add_argument("--pdf", type=Path, default=None,
-                        help="Process one explicit PDF (useful for benchmarking).")
-    parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR)
-    parser.add_argument("--model", default=None)
-    parser.add_argument("--limit", type=int, default=1)
-    parser.add_argument("--all", action="store_true",
-                        help="Process every missing PDF; incurs API charges.")
-    parser.add_argument("--force", action="store_true",
-                        help="Overwrite existing per-document extractions.")
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--attempts", type=int, default=3)
-    parser.add_argument("--workers", type=int, default=1,
-                        help="Concurrent document requests (default: 1).")
-    parser.add_argument("--no-merge", action="store_true",
-                        help="Do not run merge_cases.py after extraction.")
-    args = parser.parse_args()
-
-    load_dotenv(HERE.parents[1] / ".env")
-    model = args.model or os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
-    queue = (
-        [args.pdf]
-        if args.pdf is not None
-        else candidates(args.pdf_dir, args.output_dir, args.force)
+def run(
+    *,
+    pdf_dir: Path,
+    output_dir: Path,
+    model=None,
+    limit=1,
+    all=False,
+    force=False,
+    dry_run=True,
+    attempts=3,
+    workers=1,
+    allow_paid=False,
+) -> int:
+    args = SimpleNamespace(
+        pdf_dir=pdf_dir,
+        output_dir=output_dir / "per_doc",
+        model=model,
+        limit=limit,
+        all=all,
+        force=force,
+        dry_run=dry_run,
+        attempts=attempts,
+        workers=workers,
+        pdf=None,
     )
+    if not dry_run and not allow_paid:
+        raise ValueError("Paid extraction requires explicit allow_paid=True")
+    if attempts < 1 or workers < 1 or limit < 0:
+        raise ValueError("Invalid extraction limits")
+    raw_dir = output_dir / "gemini_raw"
+    manifest = output_dir / "gemini_manifest.jsonl"
+    model = args.model or os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
+    queue = [args.pdf] if args.pdf is not None else sorted(args.pdf_dir.glob("*.pdf"))
     if args.pdf is not None and not args.pdf.exists():
         raise SystemExit(f"PDF does not exist: {args.pdf}")
+
+    def fingerprint(pdf):
+        return {
+            "source_sha256": hashlib.sha256(pdf.read_bytes()).hexdigest(),
+            "model": model,
+            "prompt_sha256": hashlib.sha256(PROMPT.encode()).hexdigest(),
+            "schema_sha256": hashlib.sha256(
+                json.dumps(Extraction.model_json_schema(), sort_keys=True).encode()
+            ).hexdigest(),
+        }
+
+    def needed(pdf):
+        target = args.output_dir / f"{pdf.stem}_cases.json"
+        meta = output_dir / "fingerprints" / f"{pdf.stem}.json"
+        if force or not target.exists():
+            return True
+        json.loads(target.read_text())
+        return meta.exists() and json.loads(meta.read_text()) != fingerprint(pdf)
+
+    queue = [pdf for pdf in queue if needed(pdf)]
     if not args.all:
         queue = queue[: max(args.limit, 0)]
     print(f"{len(queue)} document(s) selected with model {model}")
     for pdf in queue:
+        date_from_name(pdf)
         print(pdf)
     if args.dry_run or not queue:
         return 0
@@ -217,30 +229,39 @@ def main() -> int:
         # One client per task avoids relying on undocumented client thread safety.
         client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
         try:
-            extraction = extract_one(client, pdf, model, args.attempts)
+            extraction = extract_one(client, pdf, model, args.attempts, raw_dir)
             output = args.output_dir / f"{pdf.stem}_cases.json"
-            output.write_text(json.dumps(
-                [case.model_dump() for case in extraction.cases], indent=2
-            ))
-            append_manifest({
-                "source_file": pdf.name,
-                "model": model,
-                "started_at": started.isoformat(),
-                "finished_at": datetime.now(timezone.utc).isoformat(),
-                "case_count": len(extraction.cases),
-                "status": "success",
-                "document_notes": extraction.document_notes,
-            })
+            atomic_json(output, [case.model_dump() for case in extraction.cases])
+            atomic_json(
+                output_dir / "fingerprints" / f"{pdf.stem}.json", fingerprint(pdf)
+            )
+            append_manifest(
+                {
+                    "source_file": pdf.name,
+                    **fingerprint(pdf),
+                    "model": model,
+                    "started_at": started.isoformat(),
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "case_count": len(extraction.cases),
+                    "status": "success",
+                    "document_notes": extraction.document_notes,
+                },
+                manifest,
+            )
             return pdf, True, f"{len(extraction.cases)} cases -> {output}"
         except Exception as exc:
-            append_manifest({
-                "source_file": pdf.name,
-                "model": model,
-                "started_at": started.isoformat(),
-                "finished_at": datetime.now(timezone.utc).isoformat(),
-                "status": "failed",
-                "error": repr(exc),
-            })
+            append_manifest(
+                {
+                    "source_file": pdf.name,
+                    **fingerprint(pdf),
+                    "model": model,
+                    "started_at": started.isoformat(),
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "failed",
+                    "error": repr(exc),
+                },
+                manifest,
+            )
             return pdf, False, f"FAILED: {exc}"
 
     failures = 0
@@ -254,14 +275,4 @@ def main() -> int:
             failures += not ok
             print(f"[{completed}/{len(queue)}] {pdf.name}: {message}")
 
-    if not failures and not args.no_merge:
-        subprocess.run(
-            ["python", str(HERE / "merge_cases.py"), "--dir",
-             str(args.output_dir.parent)],
-            check=True,
-        )
     return 1 if failures else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

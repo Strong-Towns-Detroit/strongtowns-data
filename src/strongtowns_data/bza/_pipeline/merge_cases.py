@@ -1,8 +1,7 @@
-"""Validate and merge VLM-extracted BZA cases into the clean v2 dataset.
+"""Validate and merge VLM-extracted BZA cases into the BZA dataset.
 
 Input:  bza_dataset_gemini/per_doc/*.json — one file per meeting, a list of case
-        records emitted by the VLM extraction (schema in
-        .claude/skills/bza-minutes/SKILL.md).
+        records emitted by extract_bza_with_gemini.py.
 Output: bza_dataset_gemini/all_cases.json
         bza_dataset_gemini/all_cases.csv
         bza_dataset_gemini/review_low_confidence.json — cases needing human eyes
@@ -11,26 +10,43 @@ Merge key is (case_number, meeting_date): a case continued across meetings keeps
 one row per occurrence. Records are never fabricated here — this only validates,
 normalizes the decision field, dedupes, and flags.
 
-Usage: python merge_cases.py [--dir bza_dataset_gemini]
+Called in-process by the private offline atlas builder.
 """
 
 from __future__ import annotations
 
-import argparse
 import csv
-from difflib import SequenceMatcher
 import json
 import re
+from difflib import SequenceMatcher
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
 FIELDS = [
-    "occurrence_id", "case_number", "meeting_date", "hearing_time", "council_district",
-    "petitioner", "location", "legal_description", "proposal", "bseed_refs",
-    "action", "affirmative_votes", "affirmative_count", "negative_votes",
-    "negative_count", "abstentions", "decision", "decision_status",
-    "confidence", "confidence_note", "record_type", "decision_basis", "source_file",
+    "occurrence_id",
+    "case_number",
+    "meeting_date",
+    "hearing_time",
+    "council_district",
+    "petitioner",
+    "location",
+    "legal_description",
+    "proposal",
+    "bseed_refs",
+    "action",
+    "affirmative_votes",
+    "affirmative_count",
+    "negative_votes",
+    "negative_count",
+    "abstentions",
+    "decision",
+    "decision_status",
+    "confidence",
+    "confidence_note",
+    "record_type",
+    "decision_basis",
+    "source_file",
 ]
 
 # Decision line -> normalized status. Order matters (specific first).
@@ -72,7 +88,9 @@ def norm(rec: dict, source_file: str) -> dict:
     out["decision_basis"] = rec.get("decision_basis") or (
         "inferred_from_motion_and_vote"
         if out.get("decision") and re.search(r"\binferr", note, re.I)
-        else "recorded_disposition" if out.get("decision") else None
+        else "recorded_disposition"
+        if out.get("decision")
+        else None
     )
     # Minutes sometimes decorate the value with "BSEED", parenthetical refs,
     # or leading prose. The canonical BZA occurrence key is the N-YY token.
@@ -88,8 +106,12 @@ def norm(rec: dict, source_file: str) -> dict:
         cnt = rec.get(f"{side}_count")
         if cnt is None and isinstance(names, list):
             cnt = len(names)
-        elif cnt is None and isinstance(names, str) and names.strip() and \
-                names.strip().lower() not in ("none", "n/a", "-"):
+        elif (
+            cnt is None
+            and isinstance(names, str)
+            and names.strip()
+            and names.strip().lower() not in ("none", "n/a", "-")
+        ):
             cnt = len([n for n in re.split(r"[,\n]", names) if n.strip()])
         out[f"{side}_count"] = cnt
     out["decision_status"] = classify(out.get("decision"), rec.get("decision_status"))
@@ -119,8 +141,14 @@ def _combine_text(left, right, separator=" | "):
 def reconcile(left: dict, right: dict) -> dict:
     """Reconcile repeated blocks/duplicate PDF versions for one case occurrence."""
     out = dict(left)
-    for field in ("hearing_time", "council_district", "petitioner", "location",
-                  "legal_description", "proposal"):
+    for field in (
+        "hearing_time",
+        "council_district",
+        "petitioner",
+        "location",
+        "legal_description",
+        "proposal",
+    ):
         if not out.get(field):
             out[field] = right.get(field)
         elif right.get(field) and not _similar(out[field], right[field]):
@@ -145,7 +173,8 @@ def reconcile(left: dict, right: dict) -> dict:
         out.get("source_file"), right.get("source_file"), "; "
     )
     statuses = {out.get("decision_status"), right.get("decision_status")} - {
-        None, "unknown"
+        None,
+        "unknown",
     }
     if len(statuses) == 1:
         out["decision_status"] = statuses.pop()
@@ -163,9 +192,7 @@ def reconcile(left: dict, right: dict) -> dict:
         out["record_type"] = "minutes_case"
     elif "agenda_case" in {out.get("record_type"), right.get("record_type")}:
         out["record_type"] = "agenda_case"
-    out["decision_basis"] = (
-        out.get("decision_basis") or right.get("decision_basis")
-    )
+    out["decision_basis"] = out.get("decision_basis") or right.get("decision_basis")
     return out
 
 
@@ -176,18 +203,10 @@ def distinct_matters(left: dict, right: dict) -> bool:
     return False
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--dir", type=Path, default=HERE / "bza_dataset_gemini")
-    ap.add_argument(
-        "--stem", default=None,
-        help="Aggregate filename stem (default: all_cases_v2 for v2, else all_cases).",
-    )
-    a = ap.parse_args()
-    per_doc = a.dir / "per_doc"
+def run(directory: Path, stem: str = "all_cases") -> int:
+    per_doc = directory / "per_doc"
     if not per_doc.is_dir():
-        print(f"no per-doc dir: {per_doc}")
-        return 2
+        raise FileNotFoundError(f"no per-doc dir: {per_doc}")
 
     seen: dict[tuple, dict] = {}
     low: list[dict] = []
@@ -197,8 +216,11 @@ def main() -> int:
         try:
             cases = json.loads(jf.read_text())
         except json.JSONDecodeError as e:
-            print(f"! {jf.name}: bad JSON ({e}) — skipped")
-            continue
+            raise ValueError(f"Invalid extraction {jf.name}: {e}") from e
+        if not isinstance(cases, list) or any(
+            not isinstance(rec, dict) for rec in cases
+        ):
+            raise ValueError(f"Invalid extraction records: {jf.name}")
         for rec in cases:
             r = norm(rec, jf.stem.replace("_cases", "") + ".pdf")
             key = (str(r.get("case_number")), str(r.get("meeting_date")))
@@ -221,25 +243,27 @@ def main() -> int:
         base = f"{row.get('meeting_date')}:{row.get('case_number') or 'unassigned'}"
         occurrence_counts[base] = occurrence_counts.get(base, 0) + 1
         row["occurrence_id"] = f"{base}:{occurrence_counts[base]}"
-        if (row.get("confidence") == "low") or not row.get("case_number") \
-                or not row.get("decision") and row.get("decision_status") == "unknown":
+        if (
+            (row.get("confidence") == "low")
+            or not row.get("case_number")
+            or not row.get("decision")
+            and row.get("decision_status") == "unknown"
+        ):
             low.append(row)
-    a.dir.mkdir(parents=True, exist_ok=True)
-    stem = a.stem or "all_cases"
-    (a.dir / f"{stem}.json").write_text(json.dumps(rows, indent=2))
-    with (a.dir / f"{stem}.csv").open("w", newline="") as fh:
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{stem}.json").write_text(json.dumps(rows, indent=2))
+    with (directory / f"{stem}.csv").open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=FIELDS, extrasaction="ignore")
         w.writeheader()
         for r in rows:
-            w.writerow({k: (json.dumps(v) if isinstance(v, list) else v)
-                        for k, v in r.items()})
-    (a.dir / "review_low_confidence.json").write_text(json.dumps(low, indent=2))
+            w.writerow(
+                {k: (json.dumps(v) if isinstance(v, list) else v) for k, v in r.items()}
+            )
+    (directory / "review_low_confidence.json").write_text(json.dumps(low, indent=2))
 
-    print(f"merged {n_files} docs, {n_cases} case records -> "
-          f"{len(rows)} unique (case,date)")
+    print(
+        f"merged {n_files} docs, {n_cases} case records -> "
+        f"{len(rows)} unique (case,date)"
+    )
     print(f"  {len(low)} flagged for review -> review_low_confidence.json")
     return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

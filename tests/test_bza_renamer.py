@@ -2,7 +2,7 @@
 import datetime
 import pytest
 
-from strongtowns_data.pipelines.bza.filenames import convert_to_date, parse_date
+from strongtowns_data.bza._pipeline.filenames import convert_to_date, parse_date
 
 
 class TestConvertToDate:

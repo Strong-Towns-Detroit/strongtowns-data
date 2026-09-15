@@ -11,30 +11,22 @@ reviewing the pilot output and accepting API cost.
 
 from __future__ import annotations
 
-import argparse
 import concurrent.futures
+import hashlib
 import json
 import os
 import random
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Literal
 
 import pandas as pd
 from pydantic import BaseModel, Field, model_validator
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[1]
-DATA = HERE / "bza_dataset_gemini"
-HISTORIES = DATA / "case_histories.csv"
-OUTPUT_DIR = DATA / "project_type_enrichment"
-PER_CASE_DIR = OUTPUT_DIR / "per_case"
-RAW_DIR = OUTPUT_DIR / "raw"
-MERGED = OUTPUT_DIR / "project_types.csv"
-JOINED = OUTPUT_DIR / "case_histories_with_project_types.csv"
-REVIEW = OUTPUT_DIR / "review_medium_low_confidence.csv"
-AUDIT = OUTPUT_DIR / "project_type_audit.json"
+from .._cache import atomic_json
+
 DEFAULT_MODEL = "gemini-3.1-pro-preview"
 WRITE_LOCK = threading.Lock()
 
@@ -159,25 +151,18 @@ Cases:
 """
 
 
-def load_dotenv(path: Path) -> None:
-    if not path.exists():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
-
-
 def case_payload(row: pd.Series) -> dict:
+    def value(key):
+        cell = row.get(key)
+        return None if cell is None or pd.isna(cell) else cell
+
     return {
-        "case_history_id": row["case_history_id"],
-        "case_number": row.get("printed_case_number"),
-        "petitioner": row.get("petitioner"),
-        "location": row.get("location"),
-        "proposal": str(row.get("proposal") or "")[:9000],
-        "recorded_outcome": row.get("final_outcome"),
+        "case_history_id": value("case_history_id"),
+        "case_number": value("printed_case_number"),
+        "petitioner": value("petitioner"),
+        "location": value("location"),
+        "proposal": str(value("proposal") or "")[:9000],
+        "recorded_outcome": value("final_outcome"),
     }
 
 
@@ -185,15 +170,14 @@ def classify_batch(
     rows: list[dict],
     model: str,
     attempts: int,
+    raw_dir: Path,
 ) -> list[ProjectClassification]:
     from google import genai
     from google.genai import types
 
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     expected = {row["case_history_id"] for row in rows}
-    prompt = PROMPT.format(
-        cases_json=json.dumps(rows, ensure_ascii=False, indent=2)
-    )
+    prompt = PROMPT.format(cases_json=json.dumps(rows, ensure_ascii=False, indent=2))
     for attempt in range(1, attempts + 1):
         try:
             response = client.models.generate_content(
@@ -206,20 +190,16 @@ def classify_batch(
                 ),
             )
             parsed = BatchResult.model_validate_json(response.text)
-            returned = {
-                item.case_history_id for item in parsed.classifications
-            }
+            returned = {item.case_history_id for item in parsed.classifications}
             if returned != expected:
                 raise ValueError(
-                    f"ID mismatch; missing={sorted(expected-returned)}, "
-                    f"unexpected={sorted(returned-expected)}"
+                    f"ID mismatch; missing={sorted(expected - returned)}, "
+                    f"unexpected={sorted(returned - expected)}"
                 )
             digest = rows[0]["case_history_id"].replace("/", "_")
-            RAW_DIR.mkdir(parents=True, exist_ok=True)
+            raw_dir.mkdir(parents=True, exist_ok=True)
             with WRITE_LOCK:
-                (RAW_DIR / f"{digest}.json").write_text(
-                    response.text, encoding="utf-8"
-                )
+                (raw_dir / f"{digest}.json").write_text(response.text, encoding="utf-8")
             return parsed.classifications
         except Exception:
             if attempt == attempts:
@@ -228,49 +208,49 @@ def classify_batch(
     raise RuntimeError("unreachable")
 
 
-def write_results(items: list[ProjectClassification]) -> None:
-    PER_CASE_DIR.mkdir(parents=True, exist_ok=True)
+def write_results(items: list[ProjectClassification], per_case_dir: Path) -> None:
+    per_case_dir.mkdir(parents=True, exist_ok=True)
     with WRITE_LOCK:
         for item in items:
-            path = PER_CASE_DIR / f"{item.case_history_id}.json"
-            path.write_text(
-                json.dumps(item.model_dump(), ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            path = per_case_dir / f"{item.case_history_id}.json"
+            atomic_json(path, item.model_dump())
 
 
-def merge_results() -> None:
+def merge_results(histories_path: Path, output_dir: Path) -> None:
+    per_case_dir = output_dir / "per_case"
+    merged = output_dir / "project_types.csv"
+    joined_path = output_dir / "case_histories_with_project_types.csv"
+    review_path = output_dir / "review_medium_low_confidence.csv"
+    audit_path = output_dir / "project_type_audit.json"
     records = [
         json.loads(path.read_text(encoding="utf-8"))
-        for path in sorted(PER_CASE_DIR.glob("*.json"))
+        for path in sorted(per_case_dir.glob("*.json"))
     ]
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    classifications = pd.DataFrame(records)
-    classifications.to_csv(MERGED, index=False)
-    histories = pd.read_csv(HISTORIES)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    classifications = pd.DataFrame(
+        records, columns=list(ProjectClassification.model_fields)
+    )
+    classifications.to_csv(merged, index=False)
+    histories = pd.read_csv(histories_path)
     joined = histories.merge(
         classifications,
         on="case_history_id",
         how="left",
         validate="one_to_one",
     )
-    joined.to_csv(JOINED, index=False)
+    joined.to_csv(joined_path, index=False)
     review = joined[joined["confidence"].isin(["medium", "low"])]
-    review.to_csv(REVIEW, index=False)
+    review.to_csv(review_path, index=False)
     audit = {
         "case_histories": int(len(histories)),
         "classifications": int(len(classifications)),
-        "unique_classified_ids": int(
-            classifications["case_history_id"].nunique()
-        ),
-        "unmatched_histories": int(
-            joined["project_type_family"].isna().sum()
-        ),
+        "unique_classified_ids": int(classifications["case_history_id"].nunique()),
+        "unmatched_histories": int(joined["project_type_family"].isna().sum()),
         "project_type_families": {
             str(key): int(value)
-            for key, value in classifications[
-                "project_type_family"
-            ].value_counts().items()
+            for key, value in classifications["project_type_family"]
+            .value_counts()
+            .items()
         },
         "confidence": {
             str(key): int(value)
@@ -278,58 +258,79 @@ def merge_results() -> None:
         },
         "review_records": int(len(review)),
     }
-    AUDIT.write_text(json.dumps(audit, indent=2), encoding="utf-8")
-    print(f"Merged {len(records)} classifications -> {MERGED}")
-    print(f"Joined case histories -> {JOINED}")
-    print(f"Review queue: {len(review)} -> {REVIEW}")
+    audit_path.write_text(json.dumps(audit, indent=2), encoding="utf-8")
+    print(f"Merged {len(records)} classifications -> {merged}")
+    print(f"Joined case histories -> {joined_path}")
+    print(f"Review queue: {len(review)} -> {review_path}")
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--outcomes",
-        default="denied_upheld",
-        help=(
-            "Comma-separated normalized outcomes. Default analyzes requests "
-            "the Board denied or upheld against the applicant."
-        ),
+def run(
+    *,
+    histories_path: Path,
+    output_dir: Path,
+    model=None,
+    outcomes="",
+    batch_size=12,
+    limit=12,
+    all=False,
+    force=False,
+    dry_run=True,
+    workers=1,
+    attempts=3,
+    allow_paid=False,
+) -> int:
+    if not dry_run and not allow_paid:
+        raise ValueError("Paid classification requires explicit allow_paid=True")
+    if batch_size < 1 or workers < 1 or attempts < 1 or limit < 0:
+        raise ValueError("Invalid classification limits")
+    args = SimpleNamespace(
+        model=model,
+        outcomes=outcomes,
+        batch_size=batch_size,
+        limit=limit,
+        all=all,
+        force=force,
+        dry_run=dry_run,
+        workers=workers,
+        attempts=attempts,
     )
-    parser.add_argument("--model", default=None)
-    parser.add_argument("--batch-size", type=int, default=12)
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=12,
-        help="Maximum cases selected unless --all is supplied.",
-    )
-    parser.add_argument("--all", action="store_true")
-    parser.add_argument("--force", action="store_true")
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--workers", type=int, default=1)
-    parser.add_argument("--attempts", type=int, default=3)
-    args = parser.parse_args()
-
-    load_dotenv(ROOT / ".env")
+    per_case_dir = output_dir / "per_case"
     model = args.model or os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
-    outcomes = {
-        value.strip() for value in args.outcomes.split(",") if value.strip()
-    }
-    histories = pd.read_csv(HISTORIES)
-    selected = histories[histories["final_outcome"].isin(outcomes)].copy()
-    if not args.force:
-        selected = selected[
-            ~selected["case_history_id"].map(
-                lambda case_id: (PER_CASE_DIR / f"{case_id}.json").exists()
-            )
-        ]
-    selected = selected.sort_values(
-        ["first_meeting_date", "case_history_id"]
+    outcomes = {value.strip() for value in args.outcomes.split(",") if value.strip()}
+    histories = pd.read_csv(histories_path)
+    selected = (
+        histories[histories["final_outcome"].isin(outcomes)].copy()
+        if outcomes
+        else histories.copy()
     )
+
+    def fingerprint(row):
+        return {
+            "payload": case_payload(row),
+            "model": model,
+            "prompt_sha256": hashlib.sha256(PROMPT.encode()).hexdigest(),
+            "schema_sha256": hashlib.sha256(
+                json.dumps(BatchResult.model_json_schema(), sort_keys=True).encode()
+            ).hexdigest(),
+        }
+
+    def cached(row):
+        case_id = row["case_history_id"]
+        path = per_case_dir / f"{case_id}.json"
+        meta = output_dir / "fingerprints" / f"{case_id}.json"
+        if not path.exists():
+            return False
+        ProjectClassification.model_validate_json(path.read_text())
+        return not meta.exists() or json.loads(meta.read_text()) == fingerprint(row)
+
+    if not args.force:
+        selected = selected[~selected.apply(cached, axis=1)]
+    selected = selected.sort_values(["first_meeting_date", "case_history_id"])
     if not args.all:
         selected = selected.head(max(args.limit, 0))
     payloads = [case_payload(row) for _, row in selected.iterrows()]
     batches = [
-        payloads[index:index + args.batch_size]
+        payloads[index : index + args.batch_size]
         for index in range(0, len(payloads), args.batch_size)
     ]
     print(
@@ -344,7 +345,7 @@ def main() -> int:
             )
         return 0
     if not batches:
-        merge_results()
+        merge_results(histories_path, output_dir)
         return 0
     if not os.getenv("GEMINI_API_KEY"):
         raise SystemExit("GEMINI_API_KEY is not set in .env or environment")
@@ -355,7 +356,7 @@ def main() -> int:
     ) as executor:
         futures = {
             executor.submit(
-                classify_batch, batch, model, args.attempts
+                classify_batch, batch, model, args.attempts, output_dir / "raw"
             ): batch
             for batch in batches
         }
@@ -363,20 +364,21 @@ def main() -> int:
             batch = futures[future]
             try:
                 results = future.result()
-                write_results(results)
-                print(
-                    f"{len(results)} classified: "
-                    f"{batch[0]['case_history_id']} …"
-                )
+                write_results(results, per_case_dir)
+                for item in results:
+                    row = histories[
+                        histories.case_history_id == item.case_history_id
+                    ].iloc[0]
+                    atomic_json(
+                        output_dir / "fingerprints" / f"{item.case_history_id}.json",
+                        fingerprint(row),
+                    )
+                print(f"{len(results)} classified: {batch[0]['case_history_id']} …")
             except Exception as exc:
                 failures += 1
                 print(
                     f"FAILED batch beginning {batch[0]['case_history_id']}: "
                     f"{type(exc).__name__}: {exc}"
                 )
-    merge_results()
+    merge_results(histories_path, output_dir)
     return 1 if failures else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

@@ -668,3 +668,24 @@ def detroit_residential_setback_envelope() -> DataPipeline:
         build=build,
         description="Parcel geometry joined to preserved residential setback results.",
     )
+
+
+@data_pipeline("detroit-bza-atlas")
+def detroit_bza_atlas() -> DataPipeline:
+    """Internal offline assembly; member fetching only downloads releases."""
+    from pathlib import Path
+    from strongtowns_data.models import DatasetModel
+    from strongtowns_data.bza._pipeline.build import validate
+    asset = DataAsset("detroit.bza.atlas", Path("data/datasets/detroit-bza-atlas"),
+                      DatasetModel(name="detroit.bza.atlas", version="1.0.0", custom_validator=validate))
+
+    def build(context):
+        from strongtowns_data.bza._pipeline.build import build as build_atlas
+        audit = build_atlas(
+            context.inputs[BZA_GEMINI_RAW.id] / "raw",
+            context.staging[asset.id], reviews=context.root / "resources/bza",
+        )
+        return {asset.id: BuildMetadata(counts=audit["counts"], source=audit)}
+
+    return DataPipeline("detroit-bza-atlas", (BZA_GEMINI_RAW.id,),
+                        (asset,), build=build, description="Prepared BZA histories and audited atlas tables.")

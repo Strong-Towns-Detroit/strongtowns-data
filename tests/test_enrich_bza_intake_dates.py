@@ -2,7 +2,7 @@ import io
 import json
 from unittest.mock import patch
 
-from enrich_bza_intake_dates import (
+from strongtowns_data.bza._pipeline.enrich_bza_intake_dates import (
     normalized_case_number,
     request_records,
     score_candidate,

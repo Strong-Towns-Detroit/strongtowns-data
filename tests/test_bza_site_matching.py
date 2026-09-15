@@ -1,4 +1,4 @@
-from bza_site_matching import address_candidates, clean_street
+from strongtowns_data.bza._pipeline.bza_site_matching import address_candidates, clean_street
 
 
 def test_multi_address_single_street():

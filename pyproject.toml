@@ -36,6 +36,7 @@ dev = ["pytest", "pytest-mock", "ruff"]
 docs = ["pdoc>=15,<16"]
 archive = ["boto3"]
 census = ["pytidycensus"]
+minutes = ["google-genai", "pydantic>=2,<3"]
 semantic = ["sentence-transformers"]
 accessibility = ["r5py"]
 notebooks = ["marimo>=0.18,<1"]
@@ -50,7 +51,6 @@ pythonpath = [
     "pipelines/parcel-data",
     "pipelines/housingDataAnalysis/src",
     "pipelines/housingDataAnalysis/street_simplification",
-    "pipelines/zoning",
     "pipelines/isochrones",
 ]
 
