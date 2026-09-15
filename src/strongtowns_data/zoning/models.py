@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -118,3 +119,10 @@ def _is_internal_id(node_id: str) -> bool:
     """Check if a node ID looks like an internal section number."""
     import re
     return bool(re.match(r"^\d{2}-\d{1,2}-\d{1,4}(?:\.\d+)*$", node_id))
+
+
+def walk_sections(nodes: list[SectionNode]) -> Iterator[SectionNode]:
+    """Depth-first traversal of a section tree."""
+    for node in nodes:
+        yield node
+        yield from walk_sections(node.children)

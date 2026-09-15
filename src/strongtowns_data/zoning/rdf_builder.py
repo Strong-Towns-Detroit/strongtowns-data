@@ -4,7 +4,7 @@ Builds the A-Box (instance data) layered on top of the MZO ontology.
 All URIs are scoped by municipality to support multi-city graphs.
 
 The builder consumes the same data structures produced by
-``parse_ordinance()`` and ``build_citation_graph()`` and emits RDF
+structured ordinance records and ``build_citation_graph()`` and emits RDF
 triples suitable for SPARQL querying.
 """
 
@@ -16,7 +16,7 @@ from pathlib import Path
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCTERMS, OWL, RDF, RDFS, SKOS, XSD
 
-from strongtowns_data.zoning.document import walk_sections
+from strongtowns_data.zoning.models import walk_sections
 from strongtowns_data.zoning.models import (
     Citation,
     CitationGraph,

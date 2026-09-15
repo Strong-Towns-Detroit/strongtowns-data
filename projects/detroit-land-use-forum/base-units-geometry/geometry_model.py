@@ -1,7 +1,6 @@
 """Geometry helpers for the Detroit Base Units research track.
 
-These functions intentionally return evidence and confidence fields. They do
-not pronounce a group of assessor parcels to be a legal zoning lot.
+These functions intentionally return evidence and confidence fields.
 """
 
 from __future__ import annotations

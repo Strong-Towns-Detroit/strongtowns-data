@@ -23,9 +23,8 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator
-from pathlib import Path
 
-from strongtowns_data.zoning.document import parse_document, walk_sections
+from strongtowns_data.zoning.models import walk_sections
 from strongtowns_data.zoning.models import (
     Citation,
     CitationGraph,
@@ -450,18 +449,3 @@ def build_citation_graph(
             ))
 
     return graph
-
-
-def build_citation_graph_from_docx(
-    docx_paths: list[Path],
-    resolve_hierarchical: bool = True,
-) -> CitationGraph:
-    """Convenience function: parse .docx files and build the citation graph.
-
-    Accepts a list of .docx file paths, parses each into section trees,
-    and builds the combined citation graph.
-    """
-    all_sections: list[SectionNode] = []
-    for path in docx_paths:
-        all_sections.extend(parse_document(path))
-    return build_citation_graph(all_sections, resolve_hierarchical=resolve_hierarchical)

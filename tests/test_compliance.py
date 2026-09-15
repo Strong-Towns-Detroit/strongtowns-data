@@ -1,4 +1,4 @@
-"""Tests for check_compliance() — unified function and script wrappers."""
+"""Tests for check_compliance() — parcel area, width, and dwelling thresholds."""
 import math
 import pandas as pd
 import pytest
@@ -6,13 +6,6 @@ import pytest
 # Import the unified function directly
 from strongtowns_data.parcels.compliance import check_compliance as unified_check
 
-# Import the two script wrappers under aliases
-from calculate_buildable import (
-    check_compliance as cb_check_compliance,
-    PROPOSED_MIN_SQFT as CB_PROPOSED_MIN_SQFT,
-    PROPOSED_MIN_DWELLING_SQFT as CB_PROPOSED_MIN_DWELLING_SQFT,
-    CURRENT_MIN_DWELLING_ASSUMPTION as CB_CURRENT_MIN_DWELLING_ASSUMPTION,
-)
 from merge_and_calculate import (
     check_compliance as mc_check_compliance,
     PROPOSED_MIN_SQFT as MC_PROPOSED_MIN_SQFT,
@@ -34,22 +27,8 @@ def sample_restrictions():
 # ──────────────────────────────────────────────
 # Constants sanity checks
 # ──────────────────────────────────────────────
-class TestConstants:
-    def test_proposed_min_sqft_matches(self):
-        assert CB_PROPOSED_MIN_SQFT == MC_PROPOSED_MIN_SQFT == 1500
-
-    def test_proposed_min_dwelling_matches(self):
-        assert CB_PROPOSED_MIN_DWELLING_SQFT == MC_PROPOSED_MIN_DWELLING_SQFT == 500
-
-    def test_current_min_dwelling_matches(self):
-        assert CB_CURRENT_MIN_DWELLING_ASSUMPTION == MC_CURRENT_MIN_DWELLING_ASSUMPTION == 1000
-
-
-# ──────────────────────────────────────────────
-# calculate_buildable version
-# ──────────────────────────────────────────────
-class TestCalculateBuildableCompliance:
-    """Tests for check_compliance from calculate_buildable.py.
+class TestLotWidthCompliance:
+    """Tests for parcel area and width compliance.
 
     This version reads 'zoning_district', 'shape_area', 'frontage', 'total_floor_area'.
     """
@@ -66,7 +45,7 @@ class TestCalculateBuildableCompliance:
 
     def test_fully_compliant_parcel(self, sample_restrictions):
         row = self._make_row()
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["violates_current_min_sqft"] is False
         assert result["violates_current_min_width"] is False
         assert result["violates_proposed_min_sqft"] is False
@@ -75,42 +54,42 @@ class TestCalculateBuildableCompliance:
 
     def test_below_proposed_min_sqft(self, sample_restrictions):
         row = self._make_row(shape_area=1000)
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["violates_proposed_min_sqft"] is True
 
     def test_above_proposed_min_sqft(self, sample_restrictions):
         row = self._make_row(shape_area=2000)
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["violates_proposed_min_sqft"] is False
 
     def test_below_current_zoning_min_sqft(self, sample_restrictions):
         """Parcel at 3500 sqft in R1 (min=4000) should violate current."""
         row = self._make_row(shape_area=3500)
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["violates_current_min_sqft"] is True
         assert result["is_buildable_current_zoning"] is False
 
     def test_width_violation(self, sample_restrictions):
         """Frontage 35 in R1 (min=40) should violate width."""
         row = self._make_row(frontage=35)
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["violates_current_min_width"] is True
         assert result["is_buildable_current_zoning"] is False
 
     def test_no_width_requirement(self, sample_restrictions):
         """B4 has MinimumLotWidthInFt=None, so width should not violate."""
         row = self._make_row(zoning_district="B4", frontage=10)
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["violates_current_min_width"] is False
 
     def test_floor_area_below_proposed_dwelling(self, sample_restrictions):
         row = self._make_row(total_floor_area=400)
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["violates_proposed_min_dwelling"] is True
 
     def test_floor_area_below_current_dwelling_assumption(self, sample_restrictions):
         row = self._make_row(total_floor_area=800)
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["violates_current_min_dwelling_assumption"] is True
         # But should NOT violate proposed (800 > 500)
         assert result["violates_proposed_min_dwelling"] is False
@@ -118,14 +97,14 @@ class TestCalculateBuildableCompliance:
     def test_nan_sqft_no_violation(self, sample_restrictions):
         """NaN/zero area should not trigger violations (guard: sqft > 0)."""
         row = self._make_row(shape_area=0)
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["violates_current_min_sqft"] is False
         assert result["violates_proposed_min_sqft"] is False
 
     def test_unknown_district(self, sample_restrictions):
         """Unknown district: no zoning violations, still buildable."""
         row = self._make_row(zoning_district="ZZZZZ")
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["zoning_min_sqft"] is None
         assert result["violates_current_min_sqft"] is False
         assert result["is_buildable_current_zoning"] is True
@@ -133,25 +112,25 @@ class TestCalculateBuildableCompliance:
     def test_nan_district(self, sample_restrictions):
         """NaN district: same as unknown."""
         row = self._make_row(zoning_district=float("nan"))
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["zoning_min_sqft"] is None
         assert result["is_buildable_current_zoning"] is True
 
     def test_exact_at_threshold_not_violating(self, sample_restrictions):
         """Exactly at current min (4000 sqft for R1) should NOT violate (uses strict <)."""
         row = self._make_row(shape_area=4000)
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["violates_current_min_sqft"] is False
 
     def test_just_below_threshold_violates(self, sample_restrictions):
         """One below current min should violate."""
         row = self._make_row(shape_area=3999)
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["violates_current_min_sqft"] is True
 
     def test_zoning_min_sqft_populated(self, sample_restrictions):
         row = self._make_row(zoning_district="R2")
-        result = cb_check_compliance(row, sample_restrictions)
+        result = unified_check(row, sample_restrictions, width_col="frontage", include_buildable=True)
         assert result["zoning_min_sqft"] == 3000
         assert result["zoning_min_width"] == 30
 

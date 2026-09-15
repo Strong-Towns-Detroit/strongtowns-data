@@ -10,11 +10,6 @@ from strongtowns_data.constants import (
     MULTI_FAMILY_KEYS,
     ADU_KEYS,
 )
-from calculate_buildable import (
-    PROPOSED_MIN_SQFT as CB_PROPOSED_MIN_SQFT,
-    PROPOSED_MIN_DWELLING_SQFT as CB_PROPOSED_MIN_DWELLING_SQFT,
-    CURRENT_MIN_DWELLING_ASSUMPTION as CB_CURRENT_MIN_DWELLING_ASSUMPTION,
-)
 from merge_and_calculate import (
     PROPOSED_MIN_SQFT as MC_PROPOSED_MIN_SQFT,
     PROPOSED_MIN_DWELLING_SQFT as MC_PROPOSED_MIN_DWELLING_SQFT,
@@ -23,16 +18,16 @@ from merge_and_calculate import (
 
 
 class TestConstantsCrossCheck:
-    """Verify centralized constants match the values in both script files."""
+    """Verify centralized constants match the values in the parcel analysis."""
 
     def test_proposed_min_sqft(self):
-        assert PROPOSED_MIN_SQFT == CB_PROPOSED_MIN_SQFT == MC_PROPOSED_MIN_SQFT == 1500
+        assert PROPOSED_MIN_SQFT == MC_PROPOSED_MIN_SQFT == 1500
 
     def test_proposed_min_dwelling(self):
-        assert PROPOSED_MIN_DWELLING_SQFT == CB_PROPOSED_MIN_DWELLING_SQFT == MC_PROPOSED_MIN_DWELLING_SQFT == 500
+        assert PROPOSED_MIN_DWELLING_SQFT == MC_PROPOSED_MIN_DWELLING_SQFT == 500
 
     def test_current_min_dwelling(self):
-        assert CURRENT_MIN_DWELLING_ASSUMPTION == CB_CURRENT_MIN_DWELLING_ASSUMPTION == MC_CURRENT_MIN_DWELLING_ASSUMPTION == 1000
+        assert CURRENT_MIN_DWELLING_ASSUMPTION == MC_CURRENT_MIN_DWELLING_ASSUMPTION == 1000
 
 
 class TestResidentialZones:
