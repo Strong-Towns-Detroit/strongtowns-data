@@ -159,3 +159,41 @@ def test_build_and_read_do_not_import_provider(tmp_path, monkeypatch):
     metadata = build_pois(SimpleNamespace(inputs={POIS_RAW.id: tmp_path}, staging={POIS.id: out}))
     assert metadata[POIS.id].counts == {"input": 2, "accepted": 2, "rejected": 0}
     assert len(read_features(tmp_path)) == 2
+
+
+def test_preserved_boundary_must_match_query_fingerprint(tmp_path, monkeypatch):
+    from strongtowns_data.osm.acquisition import validate_acquisition, write_provenance
+
+    fake_osmnx(monkeypatch)
+    result = acquire_features(boundary=fixture().iloc[0].geometry, cache_root=tmp_path / "cache")
+    output = tmp_path / "snapshot"
+    write_provenance(result, output)
+    validate_acquisition(output)
+    changed = result.boundary.copy()
+    changed.geometry = changed.geometry.buffer(0.01)
+    changed.to_parquet(output / "boundary.parquet", index=False)
+    with pytest.raises(ValueError, match="boundary fingerprint"):
+        validate_acquisition(output)
+
+
+def test_partial_response_fails_even_if_provider_returned_features(tmp_path, monkeypatch):
+    ox = fake_osmnx(monkeypatch)
+
+    def partial(*args, **kwargs):
+        from pathlib import Path
+
+        (Path(ox.settings.cache_folder) / "partial.json").write_text(
+            json.dumps({"remark": "runtime error: out of memory", "elements": []})
+        )
+        return fixture()
+
+    ox.features_from_polygon = partial
+    with pytest.raises(ValueError, match="Incomplete Overpass"):
+        acquire_features(boundary=fixture().iloc[0].geometry, cache_root=tmp_path)
+    assert ox.settings.cache_folder == "original"
+
+
+def test_legacy_public_category_preserves_list_values():
+    frame = fixture().iloc[:1].copy()
+    frame["shop"] = [["bakery", "confectionery"]]
+    assert normalize_osm_pois(frame).iloc[0].category_value == ["bakery", "confectionery"]

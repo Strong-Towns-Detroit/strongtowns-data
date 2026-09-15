@@ -50,6 +50,7 @@ def normalize_osm_pois(features: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     result = points.rename(
         columns={"source_id": "poi_id", "osm_type": "source_element_type", "osm_id": "source_id"}
     ).drop(columns="routing_point_method")
+    result["category_value"] = [t.get(key) for t, key in zip(tags, points.primary_category)]
     result["source"] = "openstreetmap"
     result["name"] = tags.map(
         lambda t: next(

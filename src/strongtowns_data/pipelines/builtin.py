@@ -695,3 +695,11 @@ from strongtowns_data.osm.pipelines import (  # noqa: E402, F401
     canonical_detroit_osm_pois_v2,
     detroit_osm_pois_source_v2,
 )
+from strongtowns_data.osm.basemaps import (  # noqa: E402, F401
+    detroit_osm_boundaries_source,
+    detroit_osm_water_source,
+    detroit_osm_streets_source,
+    hd9_osm_boundaries_source,
+    hd9_osm_water_source,
+    hd9_osm_streets_source,
+)

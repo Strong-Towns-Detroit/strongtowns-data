@@ -1,4 +1,4 @@
-import osmnx as ox
+from strongtowns_data.osm.acquisition import acquire_boundaries, acquire_features
 import matplotlib.pyplot as plt
 import geopandas as gpd
 import pandas as pd
@@ -6,10 +6,6 @@ from pathlib import Path
 
 def render_detroit_strait():
     print("Downloading Detroit geography...")
-
-    # Configure OSMnx
-    ox.settings.use_cache = True
-    ox.settings.log_console = True
 
     # Define tags for water features
     tags = {
@@ -20,14 +16,14 @@ def render_detroit_strait():
 
     # 1. Download Detroit Boundary (for view trimming)
     print("Downloading Detroit boundary...")
-    detroit_boundary = ox.geocode_to_gdf("Detroit, Michigan, USA")
+    detroit_boundary = acquire_boundaries(place="Detroit, Michigan, USA").data
 
     # 2. Download Water Features (Detroit + Windsor to cover the river fully)
     print("Downloading water features for Detroit and Windsor...")
     places = ["Detroit, Michigan, USA", "Windsor, Ontario, Canada"]
 
     try:
-        water = ox.features_from_place(places, tags=tags)
+        water = acquire_features(place=places, tags=tags).data
     except Exception as e:
         print(f"Error downloading features: {e}")
         return

@@ -1,6 +1,5 @@
 """Registered OSM schema-2 pipelines; schema-1 assets remain separately resolvable."""
 
-import json
 from pathlib import Path
 
 import geopandas as gpd
@@ -19,17 +18,9 @@ from .features import POINT_COLUMNS, SOURCE_COLUMNS, prepare_features, routing_p
 
 
 def validate_source(directory, manifest):
-    from .acquisition import file_hash, fingerprint
+    from .acquisition import validate_acquisition
 
-    metadata = json.loads((directory / "acquisition.json").read_text())
-    if fingerprint(metadata["query"]) != metadata["cache_fingerprint"]:
-        raise ValueError("OSM query fingerprint mismatch")
-    if not (directory / "boundary.parquet").is_file():
-        raise ValueError("OSM source lacks boundary evidence")
-    for name, digest in metadata["response_hashes"].items():
-        path = directory / "responses" / name
-        if path.parent != directory / "responses" or file_hash(path) != digest:
-            raise ValueError("OSM response evidence mismatch")
+    validate_acquisition(directory)
     source = gpd.read_parquet(directory / "raw.parquet")
     accepted, rejected = prepare_features(source)
     if len(accepted) != len(source) or len(rejected):

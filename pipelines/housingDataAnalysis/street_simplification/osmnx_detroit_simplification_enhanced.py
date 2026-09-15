@@ -7,6 +7,7 @@ for the street network of Detroit, Michigan, with added coastline and municipal 
 """
 
 import osmnx as ox
+from strongtowns_data.osm.acquisition import acquire_boundaries, acquire_features, acquire_graph
 import matplotlib.pyplot as plt
 import pandas as pd
 from pathlib import Path
@@ -14,8 +15,6 @@ from pathlib import Path
 from strongtowns_data.geo.streets import compare_networks
 
 # Configure OSMnx
-ox.settings.use_cache = True
-ox.settings.log_console = True
 
 
 def download_detroit_geography():
@@ -32,7 +31,7 @@ def download_detroit_geography():
     print("Downloading Detroit geography (boundary and water features)...")
 
     # Get municipal boundary
-    boundary = ox.geocode_to_gdf("Detroit, Michigan, USA")
+    boundary = acquire_boundaries(place="Detroit, Michigan, USA").data
 
     # Get water features (rivers, lakes, etc.)
     # Using OSM tags for natural water features
@@ -42,10 +41,7 @@ def download_detroit_geography():
     }
 
     try:
-        water = ox.features_from_place(
-            "Detroit, Michigan, USA",
-            tags=tags
-        )
+        water = acquire_features(boundary=boundary, tags=tags).data
         print(f"Downloaded {len(water)} water features")
     except Exception as e:
         print(f"Note: Could not download water features: {e}")
@@ -73,12 +69,12 @@ def download_detroit_network(network_type='drive'):
     print(f"Downloading {network_type} network for Detroit, Michigan...")
 
     # Download network for Detroit
-    G = ox.graph_from_place(
-        "Detroit, Michigan, USA",
+    G = acquire_graph(
+        place="Detroit, Michigan, USA",
         network_type=network_type,
         custom_filter='["highway"~"motorway|trunk|primary|secondary|tertiary"]',
         simplify=False  # Get unsimplified network first
-    )
+    ).data
 
     print(f"Downloaded network with {len(G.nodes)} nodes and {len(G.edges)} edges")
     return G

@@ -236,3 +236,27 @@ def collect_pois(
         "accepted": len(source),
         "rejected": len(rejects),
     }
+
+
+def geocode_point(place, *, cache_root=Path("cache/osm")):
+    """Legacy explicit point geocoding for graph coverage checks."""
+    with settings_session(cache_root=Path(cache_root) / "geocoding") as ox:
+        return ox.geocode(place)
+
+
+def validate_acquisition(directory):
+    """Verify the recorded query against its preserved boundary and response evidence."""
+    directory = Path(directory)
+    metadata = json.loads((directory / "acquisition.json").read_text())
+    if fingerprint(metadata["query"]) != metadata["cache_fingerprint"]:
+        raise ValueError("OSM query fingerprint mismatch")
+    bounds = gpd.read_parquet(directory / "boundary.parquet")
+    if bounds.crs is None or bounds.crs.to_epsg() != 4326:
+        raise ValueError("OSM boundary CRS mismatch")
+    digest = hashlib.sha256(normalize(bounds.geometry.union_all()).wkb).hexdigest()
+    if digest != metadata["boundary_sha256"] or digest != metadata["query"]["boundary_sha256"]:
+        raise ValueError("OSM boundary fingerprint mismatch")
+    for name, digest in metadata["response_hashes"].items():
+        if Path(name).name != name or file_hash(directory / "responses" / name) != digest:
+            raise ValueError("OSM response evidence mismatch")
+    return metadata

@@ -56,3 +56,46 @@ from `prepare_features` or `routing_points`.
 The [OSMnx reference](https://osmnx.readthedocs.io/en/stable/user-reference.html)
 describes query behavior. Distributed OSM data retains
 [OpenStreetMap attribution and license metadata](https://www.openstreetmap.org/copyright).
+
+## Boundaries, water, and streets
+
+The `detroit` and `hd9` regions have explicit source pipelines. HD-9 uses Detroit,
+Hamtramck, Highland Park, and Grosse Pointe Park, matching the existing map workflow.
+Acquire the boundary first; water and street acquisition reuse its pinned geometry:
+
+```bash
+strongtowns-data status
+strongtowns-data fetch hd9-osm-boundaries-source --apply
+# Commit the validated source manifest/pointer before subsequent promotion.
+strongtowns-data fetch hd9-osm-water-source --apply
+strongtowns-data fetch hd9-osm-streets-source --apply
+```
+
+Record generated manifests and pointers between promoted operations so the next
+run starts from clean code. The same commands accept `detroit` in place of `hd9`.
+The original `detroit.osm.basemap.raw` import stays unchanged.
+
+Water retains all returned tags and geometries; excluding Lake St. Clair or
+non-polygon geometry is a display choice in `read_map_layers`. Street snapshots
+store nodes, directed `(u, v, key)` edges, geometry, and JSON attributes in
+GeoParquet. List-valued highway and OSM IDs survive; `read_graph` reconstructs the
+multigraph without importing OSMnx. The query retains network type, simplification,
+and other OSMnx settings. Raw response JSON retains tags outside OSMnx's graph
+attribute selection.
+
+Acquire and update consumer locks from this repository, then export map layers
+from the consumer without network calls:
+
+```bash
+strongtowns-data lock update hd9.osm.boundaries.raw hd9.osm.water.raw hd9.osm.streets.raw \
+  --lock ../strongtowns-detroit/strongtowns-data.lock.json --apply
+```
+
+Existing legislative, housing-map, and isochrone acquisition helpers delegate to
+the common acquisition module. Their routing algorithms and query filters remain
+unchanged. Graph/display IO is separate from acquisition.
+
+Krabby's independent `krabby_real_estate.pois.osm` implementation and its
+`data/acquisition.py` and `geo/municipal_context.py` callers were audited. That
+repository does not yet consume this package's POI adapter; its migration remains
+outside this repository's implementation, as scoped in the plan.

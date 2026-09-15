@@ -87,11 +87,10 @@ def build_network(place=None, *, point=None, dist=None, mode='drive', simplify=T
     if point is not None and dist is None:
         raise ValueError("point= requires dist= (metres)")
 
-    if place is not None:
-        G = ox.graph_from_place(place, network_type=mode, simplify=simplify)
-    else:
-        lat, lon = point
-        G = ox.graph_from_point((lat, lon), dist=dist, network_type=mode, simplify=simplify)
+    from strongtowns_data.osm.acquisition import acquire_graph
+
+    G = acquire_graph(place=place, point=point, dist=dist,
+                      network_type=mode, simplify=simplify).data
 
     return add_travel_times(G, mode)
 
@@ -172,7 +171,8 @@ def _query_lonlat(place=None, point=None):
         return float(lon), float(lat)
     q = place if isinstance(place, str) else place[0]
     try:
-        lat, lon = ox.geocode(q)
+        from strongtowns_data.osm.acquisition import geocode_point
+        lat, lon = geocode_point(q)
         return float(lon), float(lat)
     except Exception:  # noqa: BLE001 -- geocode may fail offline / on an unknown place
         return None
@@ -200,15 +200,12 @@ def fetch_water(place=None, *, point=None, dist=None, tags=_WATER_TAGS):
     GeoDataFrame in EPSG:4326 (polygons for lakes/rivers, lines for waterways),
     or None if nothing is found / the query fails (water is optional context).
     """
-    import osmnx as ox
+    from strongtowns_data.osm.acquisition import acquire_features
 
+    if place is None and point is None:
+        return None
     try:
-        if point is not None:
-            gdf = ox.features_from_point((point[0], point[1]), tags=tags, dist=dist)
-        elif place is not None:
-            gdf = ox.features_from_place(place, tags=tags)
-        else:
-            return None
+        gdf = acquire_features(place=place, point=point, dist=dist, tags=tags).data
     except Exception as e:  # noqa: BLE001 — water is best-effort context
         warnings.warn(f"fetch_water: no water features returned ({e})")
         return None
@@ -499,10 +496,10 @@ def fetch_amenities(place_or_poly, category, *, tags=None):
         raise ValueError(f"no OSM tag mapping for category {category!r}")
 
     cat_tags = tags[category]
-    if hasattr(place_or_poly, 'geom_type'):  # shapely geometry
-        feats = ox.features_from_polygon(place_or_poly, tags=cat_tags)
-    else:
-        feats = ox.features_from_place(place_or_poly, tags=cat_tags)
+    from strongtowns_data.osm.acquisition import acquire_features
+
+    region = {"boundary": place_or_poly} if hasattr(place_or_poly, 'geom_type') else {"place": place_or_poly}
+    feats = acquire_features(tags=cat_tags, **region).data
 
     if len(feats) == 0:
         return feats
