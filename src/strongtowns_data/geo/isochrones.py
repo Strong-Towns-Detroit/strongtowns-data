@@ -2,11 +2,10 @@
 
 Place-parameterized and mode-parameterized (drive / walk / bike), Detroit-agnostic.
 One shared core (network build + cache, travel-time labeling, the many-origins ->
-nearest-of-many-destinations primitive, isochrone polygons) powers three applications:
+nearest-of-many-destinations primitive, isochrone polygons) powers two applications:
 
     1. generate_isochrones  -- reachability polygons from origin point(s).
     2. walkability_score     -- score points by travel-time access to amenities.
-    3. warehouse_siting      -- rank candidate sites by drive time to destinations.
 
 Conventions follow the rest of the repo: GeoDataFrame in / out, CRS handled via
 geo.loader.sync_crs, GPKG writes via geo.streets.save_layer, maps via
@@ -21,8 +20,8 @@ Key correctness notes (see also the module-level gotchas in the design):
     time. Getting this backwards returns plausible-but-wrong numbers.
   * Walk/bike graphs must NOT trust OSM ``maxspeed`` (those are car limits). We force a
     uniform speed before computing travel times.
-  * Unreached nodes come back as +inf -- callers floor scores to 0 / surface as
-    ``n_unreached`` rather than dropping them.
+  * Unreached nodes come back as +inf -- accessibility scores floor to 0 rather
+    than dropping those locations.
 """
 
 from __future__ import annotations
@@ -588,85 +587,3 @@ def score_accessibility(points_gdf, G, *, categories, mode='walk',
         out['walkability_score'] = 0.0
         out['weakest_category'] = None
     return out
-
-
-# ── Application B: warehouse siting ──────────────────────────────────
-def site_destination_matrix(G, sites, destinations, *, cutoff_min=None,
-                            max_snap_m=1000.0, return_snap=False):
-    """(n_sites x n_destinations) drive-time matrix in MINUTES.
-
-    ``sites`` / ``destinations`` : iterables of (lat, lon). One Dijkstra per site
-    (few sites assumed) via ``time_matrix``. Unreached -> np.inf. Both sets are snapped with
-    a ``max_snap_m`` guard (warns on points beyond it). When ``return_snap=True`` returns
-    ``(M, site_snap_m, dest_snap_m)`` so callers can surface far-outside points.
-    """
-    cutoff_s = cutoff_min * 60 if cutoff_min else None
-    site_nodes, site_snap = snap_points(G, sites, max_snap_m=max_snap_m,
-                                        return_dist=True, label='site')
-    dest_nodes, dest_snap = snap_points(G, destinations, max_snap_m=max_snap_m,
-                                        return_dist=True, label='destination')
-    M = time_matrix(G, site_nodes, dest_nodes, cutoff_s=cutoff_s) / 60.0
-    if return_snap:
-        return M, site_snap, dest_snap
-    return M
-
-
-def rank_sites(G, sites, destinations, *, site_ids=None, weights=None,
-               threshold_min=30, objective='weighted_mean', cutoff_min=None,
-               max_snap_m=1000.0):
-    """Rank candidate sites by drive time to a set of destinations.
-
-    Returns a pandas DataFrame with one row per site and NON-collapsible metrics so the
-    Pareto tradeoff stays visible:
-        max_time            worst-case destination (minutes)
-        weighted_mean_time  volume-weighted typical time
-        pct_within_threshold volume-weighted coverage within ``threshold_min``
-        p90_time            90th-percentile time
-        n_unreached         destinations with no route
-        site_snap_m         how far the site itself snapped to the network (metres)
-
-    ``weights`` : optional per-destination volumes (parallel to ``destinations``).
-    ``objective`` in {'max', 'weighted_mean', 'pct_within'} sets the sort order only --
-    every column is kept so a low-mean site with a terrible max is not silently preferred.
-    ``max_snap_m`` : snap-distance guard -- sites/destinations that snap farther than this
-    trigger a warning (destinations outside the network boundary would otherwise be reported
-    reachable), and each site's own snap distance is surfaced in the ``site_snap_m`` column.
-    """
-    import pandas as pd
-
-    dests = list(destinations)
-    n_dest = len(dests)
-    w = np.ones(n_dest) if weights is None else np.asarray(weights, dtype=float)
-    if len(w) != n_dest:
-        raise ValueError("weights must be parallel to destinations")
-
-    M, site_snap, _dest_snap = site_destination_matrix(  # minutes
-        G, sites, dests, cutoff_min=cutoff_min, max_snap_m=max_snap_m, return_snap=True)
-
-    rows = []
-    for i, row in enumerate(M):
-        finite = np.isfinite(row)
-        n_unreached = int((~finite).sum())
-        wf = w[finite]
-        rf = row[finite]
-        wsum = wf.sum() if wf.sum() > 0 else 1.0
-        within = (rf <= threshold_min)
-        rows.append({
-            'site_id': (site_ids[i] if site_ids is not None else i),
-            'max_time': float(rf.max()) if finite.any() else np.inf,
-            'weighted_mean_time': float((wf * rf).sum() / wsum) if finite.any() else np.inf,
-            'pct_within_threshold': float(100.0 * (wf[within].sum() / w.sum())),
-            'p90_time': float(np.percentile(rf, 90)) if finite.any() else np.inf,
-            'n_unreached': n_unreached,
-            'site_snap_m': round(float(site_snap[i]), 1),
-        })
-    df = pd.DataFrame(rows)
-
-    sort_key = {'max': ('max_time', True),
-                'weighted_mean': ('weighted_mean_time', True),
-                'pct_within': ('pct_within_threshold', False)}[objective]
-    # Push sites with unreached destinations toward the bottom regardless of objective.
-    df = df.sort_values(
-        by=['n_unreached', sort_key[0]], ascending=[True, sort_key[1]]
-    ).reset_index(drop=True)
-    return df
