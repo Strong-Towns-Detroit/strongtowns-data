@@ -51,6 +51,7 @@ from strongtowns_data.models.datasets import (
     LVT_2023,
     LVT_2023_RAW,
     MUNICODE_RAW,
+    NEIGHBORHOODS_RAW,
     OSM_POIS,
     OSM_POIS_RAW,
     PARCELS,
@@ -117,6 +118,21 @@ def fetch_arcgis_outputs(
         return metadata
 
     return fetch
+
+
+@data_pipeline("detroit-neighborhoods-source")
+def detroit_neighborhoods_source() -> DataPipeline:
+    return DataPipeline(
+        "detroit-neighborhoods-source", (), (NEIGHBORHOODS_RAW,),
+        fetch=fetch_arcgis_outputs({
+            NEIGHBORHOODS_RAW.id: (
+                "https://services2.arcgis.com/qvkbeam7Wirps6zC/arcgis/rest/services/"
+                "Current_City_of_Detroit_Neighborhoods/FeatureServer/0"
+            ),
+        }),
+        acquisition_policy=AcquisitionPolicy.PUBLIC_NETWORK,
+        description="City of Detroit neighborhood boundary polygons.",
+    )
 
 
 @data_pipeline("detroit-parcels-source")

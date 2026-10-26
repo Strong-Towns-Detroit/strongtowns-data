@@ -100,6 +100,13 @@ def validate_parking_audit(directory: Path, _manifest) -> None:
         raise ValueError("proposed parking cannot exceed the relief requirement")
 
 
+NEIGHBORHOODS_RAW = DataAsset(
+    "detroit.neighborhoods.raw",
+    Path("data/datasets/detroit-neighborhoods-source"),
+    raw_model("detroit.neighborhoods.raw"),
+    ArchiveTier.SOURCE,
+)
+
 PARCELS_RAW = DataAsset(
     "detroit.parcels.raw",
     Path("data/datasets/detroit-parcels-source"),
